@@ -1,4 +1,4 @@
-module Mesh
+module sys_array
     #(parameter MESHROWS, MESHCOLUMNS, BITWIDTH, TILEROWS=1, TILECOLUMNS=1)
     (
         input                               clock,
@@ -6,8 +6,8 @@ module Mesh
         input signed [BITWIDTH-1:0]   in_a[MESHROWS-1:0][TILEROWS-1:0],
         input signed [BITWIDTH-1:0]   in_d[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
         input signed [BITWIDTH-1:0]   in_b[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input                               in_control_dataflow[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input                               in_control_propagate[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
+        input                               in_dataflow[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
+        input                               in_propagate[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
         input                               in_valid[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
         output signed [BITWIDTH-1:0] out_c[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
         output signed [BITWIDTH-1:0] out_b[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
@@ -24,23 +24,23 @@ module Mesh
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs that are returned) is automatically assigned to be the output
-    integer i, j, t;
-    for (i = 0; i < MESHROWS; i++) begin
+    integer k, l, t;
+    for (k = 0; k < MESHROWS; k++) begin
         for (t = 0; t < TILEROWS; t++) begin
-            assign inter_a[i][0][t] = in_a[i][t];
+            assign inter_a[k][0][t] = in_a[k][t];
         end
     end
-    for (j = 0; j < MESHCOLUMNS; j++) begin
+    for (l = 0; l < MESHCOLUMNS; l++) begin
         for (t = 0; t < TILECOLUMNS; t++) begin
-            assign inter_b[0][j][t] = in_b[j][t];
-            assign inter_d[0][j][t] = in_d[j][t];
-            assign inter_dataflow[0][j][t] = in_dataflow[j][t];
-            assign inter_propagate[0][j][t] = in_propagate[j][t];
-            assign inter_valid[0][j][t] = in_valid[j][t];
+            assign inter_b[0][l][t] = in_b[l][t];
+            assign inter_d[0][l][t] = in_d[l][t];
+            assign inter_dataflow[0][l][t] = in_dataflow[l][t];
+            assign inter_propagate[0][l][t] = in_propagate[l][t];
+            assign inter_valid[0][l][t] = in_valid[l][t];
 
-            assign out_b[j][t] = inter_b[j][MESHROWS][t];
-            assign out_c[j] = inter_d[j][MESHROWS][t];
-            assign out_valid[j] = inter_valid[j][MESHROWS][t];
+            assign out_b[l][t] = inter_b[l][MESHROWS][t];
+            assign out_c[l] = inter_d[l][MESHROWS][t];
+            assign out_valid[l] = inter_valid[l][MESHROWS][t];
         end
     end
 
@@ -50,16 +50,19 @@ module Mesh
     generate
         for (i = 0; i < MESHROWS; i++) begin
             for (j = 0; j < MESHCOLUMNS; j++) begin
-                Tile tile_instance #(BITWIDTH, TILEROWS, TILECOLUMNS) (
+                Tile #(BITWIDTH, TILEROWS, TILECOLUMNS) 
+                tile_instance (
+                    .clock(clock),
+                    .reset(reset),
                     .in_a(inter_a[i][j]),
                     .in_b(inter_b[i][j]),
                     .in_d(inter_d[i][j]),
                     .in_dataflow(inter_dataflow[i][j]),
                     .in_propagate(inter_propagate[i][j]),
                     .in_valid(inter_valid[i][j]),
-                    .out_a(inter_a[i][j + 1])
+                    .out_a(inter_a[i][j + 1]),
                     .out_b(inter_b[i + 1][j]),
-                    .out_c(inter_c[i + 1][j]),
+                    .out_c(inter_d[i + 1][j]),
                     .out_dataflow(inter_dataflow[i + 1][j]),
                     .out_propagate(inter_propagate[i + 1][j]),
                     .out_valid(inter_valid[i + 1][j])
@@ -68,7 +71,7 @@ module Mesh
                 always @(posedge clock) begin
                     inter_a[i][j + 1] <= tile_instance.out_a;
                     inter_b[i + 1][j] <= tile_instance.out_b;
-                    inter_c[i + 1][j] <= tile_instance.out_c;
+                    inter_d[i + 1][j] <= tile_instance.out_c;
                     inter_dataflow[i + 1][j] <= tile_instance.out_dataflow;
                     inter_propagate[i + 1][j] <= tile_instance.out_propagate;
                     inter_valid[i + 1][j] <= tile_instance.out_valid;
@@ -83,18 +86,20 @@ endmodule
 module Tile
     #(parameter BITWIDTH, TILEROWS, TILECOLUMNS)
     (
-        input signed [BITWIDTH-1:0] in_a[TILEROWS-1:0];
-        input signed [BITWIDTH-1:0] in_b[TILECOLUMNS-1:0];
-        input signed [BITWIDTH-1:0] in_d[TILECOLUMNS-1:0];
-        input in_dataflow[TILECOLUMNS-1:0];
-        input in_propagate[TILECOLUMNS-1:0];
-        input in_valid[TILECOLUMNS-1:0];
-        output signed [BITWIDTH-1:0] out_a[TILECOLUMNS-1:0];
-        output signed [BITWIDTH-1:0] out_b[TILECOLUMNS-1:0];
-        output signed [BITWIDTH-1:0] out_c[TILECOLUMNS-1:0];
-        output out_dataflow[TILECOLUMNS-1:0];
-        output out_propagate[TILECOLUMNS-1:0];
-        output out_valid[TILECOLUMNS-1:0];
+        input clock,
+        input reset,
+        input signed [BITWIDTH-1:0] in_a[TILEROWS-1:0],
+        input signed [BITWIDTH-1:0] in_b[TILECOLUMNS-1:0],
+        input signed [BITWIDTH-1:0] in_d[TILECOLUMNS-1:0],
+        input in_dataflow[TILECOLUMNS-1:0],
+        input in_propagate[TILECOLUMNS-1:0],
+        input in_valid[TILECOLUMNS-1:0],
+        output signed [BITWIDTH-1:0] out_a[TILECOLUMNS-1:0],
+        output signed [BITWIDTH-1:0] out_b[TILECOLUMNS-1:0],
+        output signed [BITWIDTH-1:0] out_c[TILECOLUMNS-1:0],
+        output out_dataflow[TILECOLUMNS-1:0],
+        output out_propagate[TILECOLUMNS-1:0],
+        output out_valid[TILECOLUMNS-1:0]
     );
 
     // store intermediate outputs in wires
@@ -107,23 +112,23 @@ module Tile
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs) or col (for west inputs) is automatically assigned to be the output
-    integer i, j;
-    for (i = 0; i < TILEROWS; i++) begin
-        assign inter_a[i][0] = in_a[i];
-        assign out_a[i] = inter_a[i][TILECOLUMNS];
+    integer k, l;
+    for (k = 0; k < TILEROWS; k++) begin
+        assign inter_a[k][0] = in_a[k];
+        assign out_a[k] = inter_a[k][TILECOLUMNS];
     end
-    for (j = 0; j < TILECOLUMNS; j++) begin
-        assign inter_b[0][j] = in_b[j];
-        assign inter_d[0][j] = in_d[j];
-        assign inter_dataflow[0][j] = in_dataflow[j];
-        assign inter_propagate[0][j] = in_propagate[j];
-        assign inter_valid[0][j] = in_valid[j];
+    for (l = 0; l < TILECOLUMNS; l++) begin
+        assign inter_b[0][l] = in_b[l];
+        assign inter_d[0][l] = in_d[l];
+        assign inter_dataflow[0][l] = in_dataflow[l];
+        assign inter_propagate[0][l] = in_propagate[l];
+        assign inter_valid[0][l] = in_valid[l];
 
-        assign out_b[j] = inter_b[j][TILEROWS];
-        assign out_d[j] = inter_d[j][TILEROWS];
-        assign out_dataflow[j] = inter_dataflow[j][TILEROWS];
-        assign out_propagate[j] = inter_propagate[j][TILEROWS];
-        assign out_valid[j] = inter_valid[j][TILEROWS];
+        assign out_b[l] = inter_b[TILEROWS][l];
+        assign out_c[l] = inter_d[TILEROWS][l];
+        assign out_dataflow[l] = inter_dataflow[TILEROWS][l];
+        assign out_propagate[l] = inter_propagate[TILEROWS][l];
+        assign out_valid[l] = inter_valid[TILEROWS][l];
     end
 
     // generate PE blocks and connect via intermediate wires
@@ -132,16 +137,19 @@ module Tile
     generate
         for (i = 0; i < TILEROWS; i++) begin
             for (j = 0; j < TILECOLUMNS; j++) begin
-                PE pe_instance #(BITWIDTH) (
+                PE #(BITWIDTH) 
+                pe_instance (
+                    .clock(clock),
+                    .reset(reset),
                     .in_a(inter_a[i][j]),
                     .in_b(inter_b[i][j]),
                     .in_d(inter_d[i][j]),
                     .in_dataflow(inter_dataflow[i][j]),
                     .in_propagate(inter_propagate[i][j]),
                     .in_valid(inter_valid[i][j]),
-                    .out_a(inter_a[i][j + 1])
+                    .out_a(inter_a[i][j + 1]),
                     .out_b(inter_b[i + 1][j]),
-                    .out_c(inter_c[i + 1][j]),
+                    .out_c(inter_d[i + 1][j]),
                     .out_dataflow(inter_dataflow[i + 1][j]),
                     .out_propagate(inter_propagate[i + 1][j]),
                     .out_valid(inter_valid[i + 1][j])
@@ -155,19 +163,46 @@ endmodule
 module PE
     #(parameter BITWIDTH)
     (
-        input signed [BITWIDTH-1:0] in_a;
-        input signed [BITWIDTH-1:0] in_b;
-        input signed [BITWIDTH-1:0] in_d;
-        input in_dataflow;
-        input in_propagate;
-        input in_valid;
-        output signed [BITWIDTH-1:0] out_a;
-        output signed [BITWIDTH-1:0] out_b;
-        output signed [BITWIDTH-1:0] out_c;
-        output out_dataflow;
-        output out_propagate;
-        output out_valid;
+        input clock,
+        input reset,
+        input signed [BITWIDTH-1:0] in_a,
+        input signed [BITWIDTH-1:0] in_b,
+        input signed [BITWIDTH-1:0] in_d,
+        input in_dataflow,
+        input in_propagate,
+        input in_valid,
+        output signed [BITWIDTH-1:0] out_a,
+        output signed [BITWIDTH-1:0] out_b,
+        output signed [BITWIDTH-1:0] out_c,
+        output out_dataflow,
+        output out_propagate,
+        output out_valid
     );
+
+    reg signed [BITWIDTH-1:0] b0;
+    reg signed [BITWIDTH-1:0] b1;
+    reg valid0;
+    reg valid1;
+
+    always @(posedge clock) begin
+        if (reset) begin
+            valid0 <= 0;
+            valid1 <= 0;
+        end
+        else begin
+            b0 <= in_propagate ? b0 : in_b;
+            b1 <= in_propagate ? in_b : b0;
+            valid0 <= in_propagate ? valid0 : in_valid;
+            valid1 <= in_propagate ? in_valid : valid0;
+        end
+    end
+    
+    assign out_a = in_a;
+    assign out_b = (in_propagate ? b0 : b1);
+    assign out_c = in_d + in_a * (in_propagate ? b0 : b1);
+    assign out_dataflow = in_dataflow;
+    assign out_propagate = in_propagate;
+    assign out_valid = (in_propagate ? valid0 : valid1);
 
 endmodule
 
