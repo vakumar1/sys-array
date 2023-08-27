@@ -194,10 +194,10 @@ module PE
             valid1 <= 0;
         end
         else begin
-            b0 <= in_propagate ? b0 : in_b;
-            b1 <= in_propagate ? in_b : b0;
-            valid0 <= in_propagate ? valid0 : in_valid;
-            valid1 <= in_propagate ? in_valid : valid0;
+            b0 <= (!valid || in_propagate) ? b0 : in_b;
+            b1 <= (!valid || !in_propagate) ? b1 : in_b;
+            valid0 <= (!valid || in_propagate) ? valid0 : in_valid;
+            valid1 <= (!valid || !in_propagate) ? valid1 : in_valid;
         end
     end
     
