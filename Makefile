@@ -1,26 +1,27 @@
-sim_file = simulation
-build_dir = obj_dir
+SIM_FILE = simulation
+BUILD_DIR = obj_dir
 VINC = /usr/share/verilator/include
-root = sys_array
+ROOT = sys_array
+INPUT_FILES = sys_array.v
 
-MESHROWS = 16
-MESHCOLUMNS = 16
 BITWIDTH = 32
-TILEROWS = 16
-TILECOLUMNS = 16
+MESHROWS = 4
+MESHCOLUMNS = 4
+TILEROWS = 4
+TILECOLUMNS = 4
 
 all: veri sim
 
 sim:
-	g++ -I$(VINC) -I$(build_dir)/ $(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp sim_driver.cpp $(build_dir)/V$(root)__ALL.a -o $(sim_file)
+	g++ -I$(VINC) -I$(BUILD_DIR)/ $(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp sim_driver.cpp $(BUILD_DIR)/V$(ROOT)__ALL.a -o $(SIM_FILE)
 
 veri:
-	verilator -Wall \
+	verilator -Wno-style \
 	-GMESHROWS=$(MESHROWS) -GMESHCOLUMNS=$(MESHCOLUMNS) -GBITWIDTH=$(BITWIDTH) -GTILEROWS=$(TILEROWS) -GTILECOLUMNS=$(TILECOLUMNS) \
-	--trace -cc $(root).v
-	cd $(build_dir); \
-	make -f V$(root).mk;
+	--trace -cc $(INPUT_FILES)
+	cd $(BUILD_DIR); \
+	make -f V$(ROOT).mk;
 
 clean:
-	rm -rf $(build_dir)
-	rm $(sim_file)
+	rm -rf $(BUILD_DIR)
+	rm $(SIM_FILE)

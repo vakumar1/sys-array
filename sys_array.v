@@ -15,34 +15,36 @@ module sys_array
     );
 
     // store intermediate outputs in wires
-    reg signed [BITWIDTH-1:0] inter_a[MESHROWS-1:0][MESHCOLUMNS:0][TILEROWS-1:0];
-    reg signed [BITWIDTH-1:0] inter_b[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0];
-    reg signed [BITWIDTH-1:0] inter_d[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0];
-    reg signed inter_dataflow[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0];
-    reg signed inter_propagate[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0];
-    reg signed inter_valid[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0];
+    reg signed [BITWIDTH-1:0] inter_a[MESHROWS-1:0][MESHCOLUMNS:0][TILEROWS-1:0] /*verilator split_var*/;
+    reg signed [BITWIDTH-1:0] inter_b[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    reg signed [BITWIDTH-1:0] inter_d[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    reg signed inter_dataflow[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    reg signed inter_propagate[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    reg signed inter_valid[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs that are returned) is automatically assigned to be the output
-    integer k, l, t;
-    for (k = 0; k < MESHROWS; k++) begin
-        for (t = 0; t < TILEROWS; t++) begin
-            assign inter_a[k][0][t] = in_a[k][t];
+    genvar k, l, t;
+    generate
+        for (k = 0; k < MESHROWS; k++) begin
+            for (t = 0; t < TILEROWS; t++) begin
+                assign inter_a[k][0][t] = in_a[k][t];
+            end
         end
-    end
-    for (l = 0; l < MESHCOLUMNS; l++) begin
-        for (t = 0; t < TILECOLUMNS; t++) begin
-            assign inter_b[0][l][t] = in_b[l][t];
-            assign inter_d[0][l][t] = in_d[l][t];
-            assign inter_dataflow[0][l][t] = in_dataflow[l][t];
-            assign inter_propagate[0][l][t] = in_propagate[l][t];
-            assign inter_valid[0][l][t] = in_valid[l][t];
+        for (l = 0; l < MESHCOLUMNS; l++) begin
+            for (t = 0; t < TILECOLUMNS; t++) begin
+                assign inter_b[0][l][t] = in_b[l][t];
+                assign inter_d[0][l][t] = in_d[l][t];
+                assign inter_dataflow[0][l][t] = in_dataflow[l][t];
+                assign inter_propagate[0][l][t] = in_propagate[l][t];
+                assign inter_valid[0][l][t] = in_valid[l][t];
 
-            assign out_b[l][t] = inter_b[l][MESHROWS][t];
-            assign out_c[l] = inter_d[l][MESHROWS][t];
-            assign out_valid[l] = inter_valid[l][MESHROWS][t];
+                assign out_b[l][t] = inter_b[MESHROWS][l][t];
+                assign out_c[l][t] = inter_d[MESHROWS][l][t];
+                assign out_valid[l][t] = inter_valid[MESHROWS][l][t];
+            end
         end
-    end
+        endgenerate
 
     // generate Tile blocks and connect via intermediate registers
     // (connect edge Tiles blocks to inputs/outputs)
@@ -103,20 +105,22 @@ module Tile
     );
 
     // store intermediate outputs in wires
-    wire signed [BITWIDTH-1:0] inter_a[TILEROWS-1:0][TILECOLUMNS:0];
-    wire signed [BITWIDTH-1:0] inter_b[TILEROWS:0][TILECOLUMNS-1:0];
-    wire signed [BITWIDTH-1:0] inter_d[TILEROWS:0][TILECOLUMNS-1:0];
-    wire signed inter_dataflow[TILEROWS:0][TILECOLUMNS-1:0];
-    wire signed inter_propagate[TILEROWS:0][TILECOLUMNS-1:0];
-    wire signed inter_valid[TILEROWS:0][TILECOLUMNS-1:0];
+    wire signed [BITWIDTH-1:0] inter_a[TILEROWS-1:0][TILECOLUMNS:0] /*verilator split_var*/;
+    wire signed [BITWIDTH-1:0] inter_b[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    wire signed [BITWIDTH-1:0] inter_d[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    wire signed inter_dataflow[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    wire signed inter_propagate[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    wire signed inter_valid[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs) or col (for west inputs) is automatically assigned to be the output
-    integer k, l;
-    for (k = 0; k < TILEROWS; k++) begin
-        assign inter_a[k][0] = in_a[k];
-        assign out_a[k] = inter_a[k][TILECOLUMNS];
-    end
+    genvar k, l;
+    generate
+        for (k = 0; k < TILEROWS; k++) begin
+            assign inter_a[k][0] = in_a[k];
+            assign out_a[k] = inter_a[k][TILECOLUMNS];
+        end
+    endgenerate
     for (l = 0; l < TILECOLUMNS; l++) begin
         assign inter_b[0][l] = in_b[l];
         assign inter_d[0][l] = in_d[l];
