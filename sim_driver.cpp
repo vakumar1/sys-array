@@ -8,6 +8,88 @@
 #define SIM_ERROR
 #define INTERNAL_ERROR
 
+enum feeding_state {
+    WAITING,
+    FEEDING,
+    DONE
+};
+
+class mat_state {
+private:
+    int mesh_size;
+    int tile_size;
+    int mat_rows;
+    std::vector<feeding_state> feeding;
+    std::vector<int> mat_row;
+public:
+    mat_state(int mesh_size, int tile_size, int mat_rows) {
+        this->mesh_size = mesh_size;
+        this->tile_size = tile_size;
+        this->mat_rows = mat_rows;
+        this->feeding.resize(mesh_size);
+        this->mat_row.resize(mesh_size);
+    }
+
+    // init state and kickoff feeding
+    void start() {
+        for (int i = 0; i < mesh_size; i++) {
+            this->feeding.push_back(WAITING);
+            this->mat_row.push_back(0);
+        }
+        this->feeding[0] = FEEDING;
+    }
+
+    // update the internal feed state by one tick and
+    // send inputs for all mesh units to the array
+    bool update(int** in_mat, int** out_mat, int** out_valid) {
+        feeding_state next_feeding[mesh_size];
+        for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
+            switch (this->feeding[mesh_unit]) {
+            case WAITING:
+                // feed in invalid signal to the array for each tile row
+                for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
+                    out_valid[mesh_unit][tile_unit] = 0;
+                }
+
+                // update feeding to true if the previous mesh row is feeding/done
+                if (mesh_unit > 0 && this->feeding[mesh_unit - 1] != WAITING) {
+                    next_feeding[mesh_unit] = FEEDING;
+                }
+                break;
+
+            case FEEDING:
+                // feed in the input matrix (+ valid signal) to the array for each tile row in given mesh_row
+                for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
+                    out_mat[mesh_unit][tile_unit] = in_mat[this->mat_row[mesh_unit]][mesh_unit * mesh_size + tile_unit];
+                    out_valid[mesh_unit][tile_unit] = 1;
+                }
+
+                // incr input matrix row (and end feeding if complete)
+                this->mat_row[mesh_unit]++;
+                if (this->mat_row[mesh_unit] >= mat_rows) {
+                    next_feeding[mesh_unit] = DONE;
+                }
+                break;
+
+            case DONE:
+                // feed in invalid signal to the array for each tile row
+                for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
+                    out_valid[mesh_unit][tile_unit] = 0;
+                }
+                break;
+            }
+        }
+
+        for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
+            this->feeding[mesh_unit] = next_feeding[mesh_unit];
+        }
+
+        // feeding is complete once the last mesh_row has finished
+        return this->feeding[mesh_size - 1] == DONE;
+    }
+};
+
+
 void tick(int tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     tb->eval();
     if (tfp)
@@ -23,8 +105,9 @@ void tick(int tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
 }
 
 int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp, 
-        unsigned int meshcols, unsigned int meshrows,
-        unsigned int tilecols, unsigned int tilerows,
+        const int meshcols, const int tilecols,
+        const int meshrows, const int tilerows,
+        const int c_rows,
         int** A, int** B, int** D, int** expected_C) {
     int tickcount = 0;
 
@@ -34,54 +117,33 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     tb->reset = 0;
     tick(tickcount, tb, tfp);
 
+    mat_state A_state(meshrows, tilerows, c_rows);
+    mat_state B_state(meshcols, tilecols, meshrows * tilerows);
+    mat_state D_state(meshcols, tilecols, c_rows);
+
     // propagate B through array
-    for (int row = 0; row < meshrows; row++) {
+    B_state.start();
+    while (true) {
         tick(tickcount, tb, tfp);
-        for (int m_col = 0; m_col < meshcols; m_col++) {
-            for (int t_col = 0; t_col < tilecols; t_col++) {
-                tb->in_b[m_col][t_col] = B[row][m_col * tilecols + t_col];
-                tb->in_propagate[m_col][t_col] = 0;
-                tb->in_valid[m_col][t_col] = 1;
-            }
+        bool done = B_state.update(B, (int**) tb->in_b, (int**) tb->in_b_valid);
+        A_state.update(A, (int**) tb->in_a, (int**) tb->in_a_valid);
+        D_state.update(D, (int**) tb->in_d, (int**) tb->in_d_valid);
+        if (done) {
+            break;
         }
     }
 
-    // propagate A and D through array and collect C
-    int a_outer_rows = meshcols;
-    int a_outer_cols = meshrows;
-    int a_inner_rows = tilecols;
-    int a_inner_cols = tilerows;
-    int d_outer_rows = meshcols;
-    int d_outer_cols = meshcols;
-    int d_inner_rows = tilecols;
-    int d_inner_cols = tilecols;
-    int max_outer_idx_sum = meshcols < meshrows 
-                                ? a_outer_cols + a_outer_rows - 2
-                                : 2 * d_outer_cols - 2;
-    
-    // go through each set of blocks with index [i, j] s.t. i + j = 0, 1, 2, ...
-    for (int outer_idx_sum = 0; outer_idx_sum <= max_outer_idx_sum; outer_idx_sum++) {
-        // go through the inner row of each block
-        // note: by construction A and D must have the same number of inner rows per block
-        // note: we must use the inner row in the outer loop here because each row (over all blocks in the set)
-        //     must be sent in the same clock cycle
-        for (int inner_row = 0; inner_row < tilecols; inner_row++) {
-            tick(tickcount, tb, tfp);
-            
-            // go through each block in the set (verify its correctness) and send to the array
-            for (int outer_row = 0; outer_row <= outer_idx_sum; outer_row++) {
-                int outer_col = outer_idx_sum - outer_row;
-                if (outer_row < a_outer_rows && outer_col < a_outer_cols) {
-                    for (int inner_col = 0; inner_col < a_inner_cols; inner_col++) {
-                        tb->in_a[outer_col][inner_col] = A[outer_row * a_inner_rows + inner_row][outer_col * a_inner_cols + inner_col];
-                    }
-                }
-                if (outer_row < d_outer_rows && outer_col < d_outer_cols) {
-                    for (int inner_col = 0; inner_col < d_inner_cols; inner_col++) {
-                        tb->in_d[outer_col][inner_col] = D[outer_row * d_inner_rows + inner_row][outer_col * d_inner_cols + inner_col];
-                    }
-                }
-            }
+    // propagate A and D through array
+    // TODO: collect C
+    A_state.start();
+    D_state.start();
+    while (true) {
+        tick(tickcount, tb, tfp);
+        B_state.update(B, (int**) tb->in_b, (int**) tb->in_b_valid);
+        bool a_done = A_state.update(A, (int**) tb->in_a, (int**) tb->in_a_valid);
+        bool d_done = D_state.update(D, (int**) tb->in_d, (int**) tb->in_d_valid);
+        if (a_done && d_done) {
+            break;
         }
     }
 }
