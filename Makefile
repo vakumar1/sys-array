@@ -13,7 +13,7 @@ TILECOLUMNS = 4
 all: veri sim
 
 sim:
-	g++ -I$(VINC) -I$(BUILD_DIR)/ $(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp sim_driver.cpp $(BUILD_DIR)/V$(ROOT)__ALL.a -o $(SIM_FILE)
+	g++ -g -I$(VINC) -I$(BUILD_DIR)/ $(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp sim_driver.cpp $(BUILD_DIR)/V$(ROOT)__ALL.a -o $(SIM_FILE)
 
 veri:
 	verilator -Wno-style \
