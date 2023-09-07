@@ -8,9 +8,9 @@
 #define SIM_ERROR
 #define INTERNAL_ERROR
 
-enum feeding_state {
+enum mat_stage {
     WAITING,
-    FEEDING,
+    PROCESSING,
     DONE
 };
 
@@ -19,55 +19,64 @@ private:
     int mesh_size;
     int tile_size;
     int mat_rows;
-    std::vector<feeding_state> feeding;
-    std::vector<int> mat_row;
+    std::vector<mat_stage> mesh_unit_state;
+    std::vector<int> mesh_unit_row;
+    bool ordered_rows;
 public:
-    mat_state(int mesh_size, int tile_size, int mat_rows) {
+    mat_state(int mesh_size, int tile_size, int mat_rows, bool ordered_rows) {
         this->mesh_size = mesh_size;
         this->tile_size = tile_size;
         this->mat_rows = mat_rows;
-        this->feeding.resize(mesh_size);
-        this->mat_row.resize(mesh_size);
+        this->mesh_unit_state.resize(mesh_size);
+        this->mesh_unit_row.resize(mesh_size);
+        this->ordered_rows = ordered_rows;
     }
 
     // init state and kickoff feeding
     void start() {
+        int start_row = this->ordered_rows ? 0 : mat_rows - 1;
         for (int i = 0; i < mesh_size; i++) {
-            this->feeding.push_back(WAITING);
-            this->mat_row.push_back(0);
+            this->mesh_unit_state.push_back(WAITING);
+            this->mesh_unit_row.push_back(start_row);
         }
-        this->feeding[0] = FEEDING;
+        this->mesh_unit_state[0] = PROCESSING;
     }
 
-    // update the internal feed state by one tick and
-    // send inputs for all mesh units to the array
+    // update the internal feed/read state by one tick
     bool update(int** in_mat, int** out_mat, int** out_valid) {
-        feeding_state next_feeding[mesh_size];
+        mat_stage next_mesh_unit_state[mesh_size];
         for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
-            switch (this->feeding[mesh_unit]) {
+            switch (this->mesh_unit_state[mesh_unit]) {
             case WAITING:
-                // feed in invalid signal to the array for each tile row
+                // feed in invalid signal to the array for each tile unit
                 for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
                     out_valid[mesh_unit][tile_unit] = 0;
                 }
 
-                // update feeding to true if the previous mesh row is feeding/done
-                if (mesh_unit > 0 && this->feeding[mesh_unit - 1] != WAITING) {
-                    next_feeding[mesh_unit] = FEEDING;
+                // update feeding to true if the previous mesh unit is feeding/done
+                if (mesh_unit > 0 && this->mesh_unit_state[mesh_unit - 1] != WAITING) {
+                    next_mesh_unit_state[mesh_unit] = PROCESSING;
                 }
                 break;
 
-            case FEEDING:
+            case PROCESSING:
                 // feed in the input matrix (+ valid signal) to the array for each tile row in given mesh_row
                 for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
-                    out_mat[mesh_unit][tile_unit] = in_mat[this->mat_row[mesh_unit]][mesh_unit * mesh_size + tile_unit];
+                    out_mat[mesh_unit][tile_unit] = in_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * mesh_size + tile_unit];
                     out_valid[mesh_unit][tile_unit] = 1;
                 }
 
                 // incr input matrix row (and end feeding if complete)
-                this->mat_row[mesh_unit]++;
-                if (this->mat_row[mesh_unit] >= mat_rows) {
-                    next_feeding[mesh_unit] = DONE;
+                if (this->ordered_rows) {
+                    this->mesh_unit_row[mesh_unit]++;
+                    if (this->mesh_unit_row[mesh_unit] >= mat_rows) {
+                        next_mesh_unit_state[mesh_unit] = DONE;
+                    }
+                } else {
+                    this->mesh_unit_row[mesh_unit]--;
+                    if (this->mesh_unit_row[mesh_unit] < 0) {
+                        next_mesh_unit_state[mesh_unit] = DONE;
+                    }
                 }
                 break;
 
@@ -81,11 +90,11 @@ public:
         }
 
         for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
-            this->feeding[mesh_unit] = next_feeding[mesh_unit];
+            this->mesh_unit_state[mesh_unit] = next_mesh_unit_state[mesh_unit];
         }
 
         // feeding is complete once the last mesh_row has finished
-        return this->feeding[mesh_size - 1] == DONE;
+        return this->mesh_unit_state[mesh_size - 1] == DONE;
     }
 };
 
@@ -117,9 +126,9 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     tb->reset = 0;
     tick(tickcount, tb, tfp);
 
-    mat_state A_state(meshrows, tilerows, c_rows);
-    mat_state B_state(meshcols, tilecols, meshrows * tilerows);
-    mat_state D_state(meshcols, tilecols, c_rows);
+    mat_state A_state(meshrows, tilerows, c_rows, true);
+    mat_state B_state(meshcols, tilecols, meshrows * tilerows, false);
+    mat_state D_state(meshcols, tilecols, c_rows, false);
 
     // propagate B through array
     B_state.start();
