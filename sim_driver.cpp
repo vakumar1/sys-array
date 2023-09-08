@@ -8,6 +8,26 @@
 #define SIM_ERROR 1
 #define INTERNAL_ERROR 2
 
+#ifndef BITWIDTH
+#define BITWIDTH 32
+#endif
+
+#ifndef MESHCOLS
+#define MESHCOLS 4
+#endif
+
+#ifndef TILECOLS
+#define TILECOLS 4
+#endif
+
+#ifndef MESHROWS
+#define MESHROWS 4
+#endif
+
+#ifndef TILEROWS 
+#define TILEROWS 4 
+#endif
+
 enum mat_stage {
     WAITING = 0,
     PROCESSING = 1,
@@ -36,14 +56,15 @@ public:
     void start() {
         int start_row = this->ordered_rows ? 0 : mat_rows - 1;
         for (int i = 0; i < mesh_size; i++) {
-            this->mesh_unit_state.push_back(WAITING);
-            this->mesh_unit_row.push_back(start_row);
+            this->mesh_unit_state[i] = WAITING;
+            this->mesh_unit_row[i] = start_row;
         }
         this->mesh_unit_state[0] = PROCESSING;
     }
 
     // update the internal feed/read state by one tick
-    bool update(int** in_mat, int** out_mat, int** out_valid) {
+    template <size_t mat_rows, size_t mat_cols, size_t mesh_size, size_t tile_size>
+    bool update(int in_mat[mat_rows][mat_cols], IData out_mat[mesh_size][tile_size], CData out_valid[mesh_size][tile_size]) {
         mat_stage next_mesh_unit_state[mesh_size];
         for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
             switch (this->mesh_unit_state[mesh_unit]) {
@@ -123,8 +144,8 @@ public:
     void start() {
         int start_row = this->ordered_rows ? 0 : mat_rows - 1;
         for (int i = 0; i < mesh_size; i++) {
-            this->mesh_unit_state.push_back(WAITING);
-            this->mesh_unit_row.push_back(start_row);
+            this->mesh_unit_state[i] = WAITING;
+            this->mesh_unit_row[i] = start_row;
         }
         this->valid_state = true;
     }
@@ -134,14 +155,15 @@ public:
     }
 
     // update the internal read state by one tick
-    bool update(int** in_mat, int** in_valid, int** out_mat) {
+    template <size_t mat_rows, size_t mat_cols, size_t mesh_size, size_t tile_size>
+    bool update(IData in_mat[mesh_size][tile_size], CData in_valid[mesh_size][tile_size], int out_mat[mat_rows][mat_cols]) {
         mat_stage next_mesh_unit_state[mesh_size];
         bool invalid_mesh_unit[mesh_size];
         for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
             invalid_mesh_unit[mesh_unit] = false;
         }
         for (int mesh_unit = 0; mesh_unit < mesh_size; mesh_unit++) {
-            // record valid signals
+            // record valid signals and the output values (if valid)
             int valid_count = 0;
             for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
                 if (in_valid[mesh_unit][tile_unit]) {
@@ -158,11 +180,6 @@ public:
                 switch (this->mesh_unit_state[mesh_unit]) {
                 case WAITING:
                 case PROCESSING:
-                    // read the (valid) output values from the array into the matrix
-                    for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
-                        out_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * mesh_size + tile_unit] = in_mat[mesh_unit][tile_unit];
-                    }
-                    
                     // incr output matrix row (and end reading if complete)
                     if (this->ordered_rows) {
                         this->mesh_unit_row[mesh_unit]++;
@@ -227,11 +244,11 @@ void tick(int tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
         tfp->dump(tickcount * 10 + 5);
 }
 
+
+template <size_t c_rows>
 int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp, 
-        const int meshcols, const int tilecols,
-        const int meshrows, const int tilerows,
-        const int c_rows,
-        int** A, int** B, int** D, int** expected_C) {
+        int A[c_rows][MESHROWS * TILEROWS], int B[MESHROWS * TILEROWS][MESHCOLS * TILECOLS], 
+        int D[c_rows][MESHCOLS * TILECOLS], int expected_C[c_rows][MESHCOLS * TILECOLS]) {
     int tickcount = 0;
 
     // init
@@ -240,18 +257,18 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     tb->reset = 0;
     tick(tickcount, tb, tfp);
 
-    feeding_mat_state A_state(meshrows, tilerows, c_rows, true);
-    feeding_mat_state B_state(meshcols, tilecols, meshrows * tilerows, false);
-    reading_mat_state C_state(meshcols, tilecols, c_rows, false);
-    feeding_mat_state D_state(meshcols, tilecols, c_rows, false);
+    feeding_mat_state A_state(MESHROWS, TILEROWS, c_rows, true);
+    feeding_mat_state B_state(MESHCOLS, TILECOLS, MESHROWS * TILEROWS, false);
+    reading_mat_state C_state(MESHCOLS, TILECOLS, c_rows, true);
+    feeding_mat_state D_state(MESHCOLS, TILECOLS, c_rows, false);
 
     // propagate B through array
     B_state.start();
     while (true) {
         tick(tickcount, tb, tfp);
-        bool done = B_state.update(B, reinterpret_cast<int**>(tb->in_b), reinterpret_cast<int**>(tb->in_b_valid));
-        A_state.update(A, reinterpret_cast<int**>(tb->in_a), reinterpret_cast<int**>(tb->in_a_valid));
-        D_state.update(D, reinterpret_cast<int**>(tb->in_d), reinterpret_cast<int**>(tb->in_d_valid));
+        bool done = B_state.update<MESHROWS * TILEROWS, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(B, tb->in_b, tb->in_b_valid);
+        A_state.update<c_rows, MESHROWS * TILEROWS, MESHROWS, TILEROWS>(A, tb->in_a, tb->in_a_valid);
+        D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
         if (done) {
             break;
         }
@@ -262,14 +279,14 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     A_state.start();
     D_state.start();
     C_state.start();
-    int C[c_rows][meshcols * tilecols];
+    int C[c_rows][MESHCOLS * TILECOLS];
     bool c_valid = true;
     while (true) {
         tick(tickcount, tb, tfp);
-        B_state.update(B, reinterpret_cast<int**>(tb->in_b), reinterpret_cast<int**>(tb->in_b_valid));
-        bool a_done = A_state.update(A, reinterpret_cast<int**>(tb->in_a), reinterpret_cast<int**>(tb->in_a_valid));
-        bool d_done = D_state.update(D, reinterpret_cast<int**>(tb->in_d), reinterpret_cast<int**>(tb->in_d_valid));
-        bool c_done = C_state.update(reinterpret_cast<int**>(tb->out_c), reinterpret_cast<int**>(tb->out_c_valid), reinterpret_cast<int**>(C));
+        B_state.update<MESHROWS * TILEROWS, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(B, tb->in_b, tb->in_b_valid);
+        bool a_done = A_state.update<c_rows, MESHROWS * TILEROWS, MESHROWS, TILEROWS>(A, tb->in_a, tb->in_a_valid);
+        bool d_done = D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
+        bool c_done = C_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(tb->out_c, tb->out_c_valid, C);
         c_valid = C_state.valid();
         if ((a_done && d_done && c_done) || !c_valid) {
             break;
@@ -281,7 +298,7 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     }
 
     for (int i = 0; i < c_rows; i++) {
-        for (int j = 0; j < meshcols * tilecols; j++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
             if (expected_C[i][j] != C[i][j]) {
                 return SIM_ERROR;
             }
@@ -290,52 +307,35 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     return SUCCESS;
 }
 
-int test0_identity_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
-                            int meshcols, int tilecols, int meshrows, int tilerows) {
-    int c_rows = meshrows * tilerows;
-    int A[c_rows][c_rows];
+int test0_identity_matmul(Vsys_array* tb, VerilatedVcdC* tfp) {
+    const int c_rows = MESHROWS * TILEROWS;
+    int A[c_rows][MESHROWS * TILEROWS];
     for (int i = 0; i < c_rows; i++) {
         for (int j = 0; j < c_rows; j++) {
             A[i][j] = i == j ? 1 : 0;
         }
     }
 
-    int B[meshrows * tilerows][meshcols * tilecols];
-    for (int i = 0; i < meshrows * tilerows; i++) {
-        for (int j = 0; j < meshcols * tilecols; j++) {
+    int B[MESHROWS * TILEROWS][MESHCOLS * TILECOLS];
+    for (int i = 0; i < MESHROWS * TILEROWS; i++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
             B[i][j] = 1;
         }
     }
     
-    int D[c_rows][meshcols * tilecols];
-    int expected_C[c_rows][meshcols * tilecols];
+    int D[c_rows][MESHCOLS * TILECOLS];
+    int expected_C[c_rows][MESHCOLS * TILECOLS];
     for (int i = 0; i < c_rows; i++) {
-        for (int j = 0; j < meshcols * tilecols; j++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
             D[i][j] = 0;
             expected_C[i][j] = 1;
         }
     }
 
-    return basic_matmul(tb, tfp, meshcols, tilecols, meshrows, tilerows, c_rows,
-                        reinterpret_cast<int**>(A), reinterpret_cast<int**>(B),
-                        reinterpret_cast<int**>(D), reinterpret_cast<int**>(expected_C));
-
-
+    return basic_matmul<c_rows>(tb, tfp, A, B, D, expected_C);
 }
 
 int main(int argc, char** argv) {
-    if (argc < 5) {
-        printf("Provide args: [BITWIDTH] [MESHCOLUMNS] [MESHROWS] [TILECOLUMNS] [TILEROWS]\n");
-        return INTERNAL_ERROR;
-    }
-    unsigned int bitwidth = std::stoi(argv[1]);
-    if (bitwidth != 32) {
-        printf("Bitdwith != 32 unsupported\n");
-    }
-    unsigned int meshcols = std::stoi(argv[2]);
-    unsigned int meshrows = std::stoi(argv[3]);
-    unsigned int tilecols = std::stoi(argv[4]);
-    unsigned int tilerows = std::stoi(argv[5]);
 
     Verilated::commandArgs(argc, argv);
     Vsys_array* tb = new Vsys_array;
@@ -344,7 +344,7 @@ int main(int argc, char** argv) {
     tb->trace(tfp, 99);
     tfp->open("sys_array.vcd");
 
-    int res = test0_identity_matmul(tb, tfp, meshcols, tilecols, meshrows, tilerows);
+    int res = test0_identity_matmul(tb, tfp);
     printf("Test 0 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
     return 0;
 }
