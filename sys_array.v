@@ -48,7 +48,7 @@ module sys_array
                 assign out_c_valid[l][t] = inter_d_valid[MESHROWS][l][t];
             end
         end
-        endgenerate
+    endgenerate
 
     // generate Tile blocks and connect via intermediate registers
     // (connect edge Tiles blocks to inputs/outputs)
@@ -77,17 +77,6 @@ module sys_array
                     .out_b_valid(inter_b_valid[i + 1][j]),
                     .out_d_valid(inter_d_valid[i + 1][j])
                 );
-
-                always @(posedge clock) begin
-                    inter_a[i][j + 1] <= tile_instance.out_a;
-                    inter_a_valid[i][j + 1] <= tile_instance.out_a_valid;
-                    inter_b[i + 1][j] <= tile_instance.out_b;
-                    inter_d[i + 1][j] <= tile_instance.out_d;
-                    inter_dataflow[i + 1][j] <= tile_instance.out_dataflow;
-                    inter_propagate[i + 1][j] <= tile_instance.out_propagate;
-                    inter_b_valid[i + 1][j] <= tile_instance.out_b_valid;
-                    inter_d_valid[i + 1][j] <= tile_instance.out_d_valid;
-                end
             end
         end
     endgenerate
@@ -106,14 +95,14 @@ module Tile
         input in_propagate[TILECOLS-1:0],
         input in_b_valid[TILECOLS-1:0],
         input in_d_valid[TILECOLS-1:0],
-        output signed [BITWIDTH-1:0] out_a[TILECOLS-1:0],
-        output out_a_valid[TILECOLS-1:0],
-        output signed [BITWIDTH-1:0] out_b[TILECOLS-1:0],
-        output signed [BITWIDTH-1:0] out_d[TILECOLS-1:0],
-        output out_dataflow[TILECOLS-1:0],
-        output out_propagate[TILECOLS-1:0],
-        output out_b_valid[TILECOLS-1:0],
-        output out_d_valid[TILECOLS-1:0]
+        output reg signed [BITWIDTH-1:0] out_a[TILECOLS-1:0],
+        output reg out_a_valid[TILECOLS-1:0],
+        output reg signed [BITWIDTH-1:0] out_b[TILECOLS-1:0],
+        output reg signed [BITWIDTH-1:0] out_d[TILECOLS-1:0],
+        output reg out_dataflow[TILECOLS-1:0],
+        output reg out_propagate[TILECOLS-1:0],
+        output reg out_b_valid[TILECOLS-1:0],
+        output reg out_d_valid[TILECOLS-1:0]
     );
 
     // store intermediate outputs in wires
@@ -128,13 +117,17 @@ module Tile
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs) or col (for west inputs) is automatically assigned to be the output
+    // ** note that the tile output is clocked (unlike for the PE output)
     genvar k, l;
     generate
         for (k = 0; k < TILEROWS; k++) begin
             assign inter_a[k][0] = in_a[k];
             assign inter_a_valid[k][0] = in_a_valid[k];
-            assign out_a[k] = inter_a[k][TILECOLS];
-            assign out_a_valid[k] = inter_a_valid[k][TILECOLS];
+
+            always @(posedge clock) begin
+                out_a[k] <= inter_a[k][TILECOLS];
+                out_a_valid[k] <= inter_a_valid[k][TILECOLS];
+            end
         end
     endgenerate
     for (l = 0; l < TILECOLS; l++) begin
@@ -145,12 +138,14 @@ module Tile
         assign inter_b_valid[0][l] = in_b_valid[l];
         assign inter_d_valid[0][l] = in_d_valid[l];
 
-        assign out_b[l] = inter_b[TILEROWS][l];
-        assign out_d[l] = inter_d[TILEROWS][l];
-        assign out_dataflow[l] = inter_dataflow[TILEROWS][l];
-        assign out_propagate[l] = inter_propagate[TILEROWS][l];
-        assign out_b_valid[l] = inter_b_valid[TILEROWS][l];
-        assign out_d_valid[l] = inter_d_valid[TILEROWS][l];
+        always @(posedge clock) begin
+            out_b[l] <= inter_b[TILEROWS][l];
+            out_d[l] <= inter_d[TILEROWS][l];
+            out_dataflow[l] <= inter_dataflow[TILEROWS][l];
+            out_propagate[l] <= inter_propagate[TILEROWS][l];
+            out_b_valid[l] <= inter_b_valid[TILEROWS][l];
+            out_d_valid[l] <= inter_d_valid[TILEROWS][l];
+        end
     end
 
     // generate PE blocks and connect via intermediate wires
@@ -233,7 +228,7 @@ module PE
     assign out_d = in_d + in_a * (in_propagate ? b0 : b1);
     assign out_dataflow = in_dataflow;
     assign out_propagate = in_propagate;
-    assign out_b_valid = (in_propagate ? valid0 : valid1);
+    assign out_b_valid = (in_propagate ? valid1 : valid0);
     assign out_d_valid = in_a_valid & in_d_valid & (in_propagate ? valid0 : valid1);
 
 endmodule

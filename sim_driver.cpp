@@ -83,7 +83,7 @@ public:
             case PROCESSING:
                 // feed in the input matrix (+ valid signal) to the array for each tile row in given mesh_row
                 for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
-                    out_mat[mesh_unit][tile_unit] = in_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * mesh_size + tile_unit];
+                    out_mat[mesh_unit][tile_unit] = in_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * tile_size + tile_unit];
                     out_valid[mesh_unit][tile_unit] = 1;
                 }
 
@@ -167,7 +167,7 @@ public:
             int valid_count = 0;
             for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
                 if (in_valid[mesh_unit][tile_unit]) {
-                    out_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * mesh_size + tile_unit] = in_mat[mesh_unit][tile_unit];
+                    out_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * tile_size + tile_unit] = in_mat[mesh_unit][tile_unit];
                     valid_count++;
                 }
             }
@@ -266,12 +266,18 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     feeding_mat_state D_state(MESHCOLS, TILECOLS, c_rows, false);
 
     // propagate B through array
+    unsigned char propagate = 0;
     B_state.start();
     while (true) {
         tick(tickcount, tb, tfp);
         bool done = B_state.update<MESHROWS * TILEROWS, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(B, tb->in_b, tb->in_b_valid);
         A_state.update<c_rows, MESHROWS * TILEROWS, MESHROWS, TILEROWS>(A, tb->in_a, tb->in_a_valid);
         D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
+        for (int i = 0; i < MESHCOLS; i++) {
+            for (int j = 0; j < TILECOLS; j++) {
+                tb->in_propagate[i][j] = propagate;
+            }
+        }
         if (done) {
             break;
         }
@@ -279,6 +285,7 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
 
     // propagate A and D through array
     // loop until A and D are done feeding and C is done reading, or C becomes invalid
+    propagate = 1;
     A_state.start();
     D_state.start();
     C_state.start();
@@ -292,6 +299,11 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
         bool d_done = D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
         bool c_done = C_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(tb->out_c, tb->out_c_valid, C);
         c_valid = C_state.valid();
+        for (int i = 0; i < MESHCOLS; i++) {
+            for (int j = 0; j < TILECOLS; j++) {
+                tb->in_propagate[i][j] = propagate;
+            }
+        }
         if ((a_done && d_done)) {
             waiting_iters++;
             if (c_done) {

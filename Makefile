@@ -5,10 +5,10 @@ ROOT = sys_array
 INPUT_FILES = sys_array.v
 
 BITWIDTH = 32
-MESHROWS = 2
-MESHCOLS = 2
-TILEROWS = 1
-TILECOLS = 1
+MESHROWS = 4
+MESHCOLS = 4
+TILEROWS = 2
+TILECOLS = 2
 
 all: veri sim
 
