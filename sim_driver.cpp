@@ -17,7 +17,7 @@
 #endif
 
 #ifndef TILECOLS
-#define TILECOLS 4
+#define TILECOLS 1
 #endif
 
 #ifndef MESHROWS
@@ -25,7 +25,7 @@
 #endif
 
 #ifndef TILEROWS 
-#define TILEROWS 4 
+#define TILEROWS 1
 #endif
 
 enum mat_stage {
@@ -171,7 +171,7 @@ public:
                     valid_count++;
                 }
             }
-            if (valid_count != 0 || valid_count != tile_size) {
+            if (valid_count != 0 && valid_count != tile_size) {
                 invalid_mesh_unit[mesh_unit] = true;
                 continue;
             }
@@ -230,10 +230,12 @@ public:
 };
 
 
-void tick(int tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
+void tick(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     tb->eval();
-    if (tfp)
-        tfp->dump(tickcount * 10 - 2);
+    if (tickcount > 0) {
+        if (tfp)
+            tfp->dump(tickcount * 10 - 2);
+    }
     tb->clock = 1;
     tb->eval();
     if (tfp)
@@ -242,6 +244,7 @@ void tick(int tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     tb->eval();
     if (tfp)
         tfp->dump(tickcount * 10 + 5);
+    tickcount++;
 }
 
 
@@ -281,6 +284,7 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     C_state.start();
     int C[c_rows][MESHCOLS * TILECOLS];
     bool c_valid = true;
+    int waiting_iters = 0;
     while (true) {
         tick(tickcount, tb, tfp);
         B_state.update<MESHROWS * TILEROWS, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(B, tb->in_b, tb->in_b_valid);
@@ -288,13 +292,15 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
         bool d_done = D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
         bool c_done = C_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(tb->out_c, tb->out_c_valid, C);
         c_valid = C_state.valid();
-        if ((a_done && d_done && c_done) || !c_valid) {
-            break;
+        if ((a_done && d_done)) {
+            waiting_iters++;
+            if (c_done) {
+                break;
+            }
         }
-    }
-
-    if (!c_valid) {
-        return SIM_ERROR;
+        if (!c_valid || waiting_iters >= 10) {
+            return SIM_ERROR;
+        }
     }
 
     for (int i = 0; i < c_rows; i++) {
@@ -346,5 +352,7 @@ int main(int argc, char** argv) {
 
     int res = test0_identity_matmul(tb, tfp);
     printf("Test 0 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
+
+    tfp->close();
     return 0;
 }

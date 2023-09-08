@@ -1,29 +1,29 @@
 module sys_array
-    #(parameter MESHROWS, MESHCOLUMNS, BITWIDTH, TILEROWS=1, TILECOLUMNS=1)
+    #(parameter MESHROWS, MESHCOLS, BITWIDTH, TILEROWS=1, TILECOLS=1)
     (
         input clock,
         input reset,
         input signed [BITWIDTH-1:0] in_a[MESHROWS-1:0][TILEROWS-1:0],
         input in_a_valid[MESHROWS-1:0][TILEROWS-1:0],
-        input signed [BITWIDTH-1:0] in_b[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input signed [BITWIDTH-1:0] in_d[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input in_dataflow[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input in_propagate[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input in_b_valid[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        input in_d_valid[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        output signed [BITWIDTH-1:0] out_c[MESHCOLUMNS-1:0][TILECOLUMNS-1:0],
-        output out_c_valid[MESHCOLUMNS-1:0][TILECOLUMNS-1:0]
+        input signed [BITWIDTH-1:0] in_b[MESHCOLS-1:0][TILECOLS-1:0],
+        input signed [BITWIDTH-1:0] in_d[MESHCOLS-1:0][TILECOLS-1:0],
+        input in_dataflow[MESHCOLS-1:0][TILECOLS-1:0],
+        input in_propagate[MESHCOLS-1:0][TILECOLS-1:0],
+        input in_b_valid[MESHCOLS-1:0][TILECOLS-1:0],
+        input in_d_valid[MESHCOLS-1:0][TILECOLS-1:0],
+        output signed [BITWIDTH-1:0] out_c[MESHCOLS-1:0][TILECOLS-1:0],
+        output out_c_valid[MESHCOLS-1:0][TILECOLS-1:0]
     );
 
     // store intermediate outputs in wires
-    reg signed [BITWIDTH-1:0] inter_a[MESHROWS-1:0][MESHCOLUMNS:0][TILEROWS-1:0] /*verilator split_var*/;
-    reg inter_a_valid[MESHROWS-1:0][MESHCOLUMNS:0][TILEROWS-1:0] /*verilator split_var*/;
-    reg signed [BITWIDTH-1:0] inter_b[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    reg signed [BITWIDTH-1:0] inter_d[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    reg signed inter_dataflow[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    reg signed inter_propagate[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    reg inter_b_valid[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    reg inter_d_valid[MESHROWS:0][MESHCOLUMNS-1:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    reg signed [BITWIDTH-1:0] inter_a[MESHROWS-1:0][MESHCOLS:0][TILEROWS-1:0] /*verilator split_var*/;
+    reg inter_a_valid[MESHROWS-1:0][MESHCOLS:0][TILEROWS-1:0] /*verilator split_var*/;
+    reg signed [BITWIDTH-1:0] inter_b[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
+    reg signed [BITWIDTH-1:0] inter_d[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
+    reg signed inter_dataflow[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
+    reg signed inter_propagate[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
+    reg inter_b_valid[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
+    reg inter_d_valid[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs that are returned) is automatically assigned to be the output
@@ -35,8 +35,8 @@ module sys_array
                 assign inter_a_valid[k][0][t] = in_a_valid[k][t];
             end
         end
-        for (l = 0; l < MESHCOLUMNS; l++) begin
-            for (t = 0; t < TILECOLUMNS; t++) begin
+        for (l = 0; l < MESHCOLS; l++) begin
+            for (t = 0; t < TILECOLS; t++) begin
                 assign inter_b[0][l][t] = in_b[l][t];
                 assign inter_d[0][l][t] = in_d[l][t];
                 assign inter_dataflow[0][l][t] = in_dataflow[l][t];
@@ -55,8 +55,8 @@ module sys_array
     genvar i, j;
     generate
         for (i = 0; i < MESHROWS; i++) begin
-            for (j = 0; j < MESHCOLUMNS; j++) begin
-                Tile #(BITWIDTH, TILEROWS, TILECOLUMNS) 
+            for (j = 0; j < MESHCOLS; j++) begin
+                Tile #(BITWIDTH, TILEROWS, TILECOLS) 
                 tile_instance (
                     .clock(clock),
                     .reset(reset),
@@ -94,37 +94,37 @@ module sys_array
 endmodule
 
 module Tile
-    #(parameter BITWIDTH, TILEROWS, TILECOLUMNS)
+    #(parameter BITWIDTH, TILEROWS, TILECOLS)
     (
         input clock,
         input reset,
         input signed [BITWIDTH-1:0] in_a[TILEROWS-1:0],
         input in_a_valid[TILEROWS-1:0],
-        input signed [BITWIDTH-1:0] in_b[TILECOLUMNS-1:0],
-        input signed [BITWIDTH-1:0] in_d[TILECOLUMNS-1:0],
-        input in_dataflow[TILECOLUMNS-1:0],
-        input in_propagate[TILECOLUMNS-1:0],
-        input in_b_valid[TILECOLUMNS-1:0],
-        input in_d_valid[TILECOLUMNS-1:0],
-        output signed [BITWIDTH-1:0] out_a[TILECOLUMNS-1:0],
-        output out_a_valid[TILECOLUMNS-1:0],
-        output signed [BITWIDTH-1:0] out_b[TILECOLUMNS-1:0],
-        output signed [BITWIDTH-1:0] out_d[TILECOLUMNS-1:0],
-        output out_dataflow[TILECOLUMNS-1:0],
-        output out_propagate[TILECOLUMNS-1:0],
-        output out_b_valid[TILECOLUMNS-1:0],
-        output out_d_valid[TILECOLUMNS-1:0]
+        input signed [BITWIDTH-1:0] in_b[TILECOLS-1:0],
+        input signed [BITWIDTH-1:0] in_d[TILECOLS-1:0],
+        input in_dataflow[TILECOLS-1:0],
+        input in_propagate[TILECOLS-1:0],
+        input in_b_valid[TILECOLS-1:0],
+        input in_d_valid[TILECOLS-1:0],
+        output signed [BITWIDTH-1:0] out_a[TILECOLS-1:0],
+        output out_a_valid[TILECOLS-1:0],
+        output signed [BITWIDTH-1:0] out_b[TILECOLS-1:0],
+        output signed [BITWIDTH-1:0] out_d[TILECOLS-1:0],
+        output out_dataflow[TILECOLS-1:0],
+        output out_propagate[TILECOLS-1:0],
+        output out_b_valid[TILECOLS-1:0],
+        output out_d_valid[TILECOLS-1:0]
     );
 
     // store intermediate outputs in wires
-    wire signed [BITWIDTH-1:0] inter_a[TILEROWS-1:0][TILECOLUMNS:0] /*verilator split_var*/;
-    wire inter_a_valid[TILEROWS-1:0][TILECOLUMNS:0] /*verilator split_var*/;
-    wire signed [BITWIDTH-1:0] inter_b[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    wire signed [BITWIDTH-1:0] inter_d[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    wire signed inter_dataflow[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    wire signed inter_propagate[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    wire inter_b_valid[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
-    wire inter_d_valid[TILEROWS:0][TILECOLUMNS-1:0] /*verilator split_var*/;
+    wire signed [BITWIDTH-1:0] inter_a[TILEROWS-1:0][TILECOLS:0] /*verilator split_var*/;
+    wire inter_a_valid[TILEROWS-1:0][TILECOLS:0] /*verilator split_var*/;
+    wire signed [BITWIDTH-1:0] inter_b[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
+    wire signed [BITWIDTH-1:0] inter_d[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
+    wire signed inter_dataflow[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
+    wire signed inter_propagate[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
+    wire inter_b_valid[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
+    wire inter_d_valid[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
 
     // the first row (for north inputs) or col (for west inputs) is automatically assigned to be the input
     // the last row (for north inputs) or col (for west inputs) is automatically assigned to be the output
@@ -133,11 +133,11 @@ module Tile
         for (k = 0; k < TILEROWS; k++) begin
             assign inter_a[k][0] = in_a[k];
             assign inter_a_valid[k][0] = in_a_valid[k];
-            assign out_a[k] = inter_a[k][TILECOLUMNS];
-            assign out_a_valid[k] = inter_a_valid[k][TILECOLUMNS];
+            assign out_a[k] = inter_a[k][TILECOLS];
+            assign out_a_valid[k] = inter_a_valid[k][TILECOLS];
         end
     endgenerate
-    for (l = 0; l < TILECOLUMNS; l++) begin
+    for (l = 0; l < TILECOLS; l++) begin
         assign inter_b[0][l] = in_b[l];
         assign inter_d[0][l] = in_d[l];
         assign inter_dataflow[0][l] = in_dataflow[l];
@@ -158,7 +158,7 @@ module Tile
     genvar i, j;
     generate
         for (i = 0; i < TILEROWS; i++) begin
-            for (j = 0; j < TILECOLUMNS; j++) begin
+            for (j = 0; j < TILECOLS; j++) begin
                 PE #(BITWIDTH) 
                 pe_instance (
                     .clock(clock),
