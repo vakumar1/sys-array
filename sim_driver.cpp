@@ -62,6 +62,10 @@ public:
         this->mesh_unit_state[0] = PROCESSING;
     }
 
+    int current_row(int mesh_unit) {
+        return this->mesh_unit_row[mesh_unit];
+    }
+
     // update the internal feed/read state by one tick
     template <size_t mat_rows, size_t mat_cols, size_t mesh_size, size_t tile_size>
     bool update(int in_mat[mat_rows][mat_cols], IData out_mat[mesh_size][tile_size], CData out_valid[mesh_size][tile_size]) {
@@ -249,10 +253,9 @@ void tick(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
 
 
 template <size_t c_rows>
-int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp, 
+int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, 
         int A[c_rows][MESHROWS * TILEROWS], int B[MESHROWS * TILEROWS][MESHCOLS * TILECOLS], 
         int D[c_rows][MESHCOLS * TILECOLS], int expected_C[c_rows][MESHCOLS * TILECOLS]) {
-    int tickcount = 0;
 
     // init
     tb->reset = 1;
@@ -270,14 +273,16 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     B_state.start();
     while (true) {
         tick(tickcount, tb, tfp);
-        bool done = B_state.update<MESHROWS * TILEROWS, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(B, tb->in_b, tb->in_b_valid);
-        A_state.update<c_rows, MESHROWS * TILEROWS, MESHROWS, TILEROWS>(A, tb->in_a, tb->in_a_valid);
-        D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
         for (int i = 0; i < MESHCOLS; i++) {
             for (int j = 0; j < TILECOLS; j++) {
                 tb->in_propagate[i][j] = propagate;
+                tb->in_b_shelf_life[i][j] = B_state.current_row(i) + 1;
             }
         }
+        bool done = B_state.update<MESHROWS * TILEROWS, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(B, tb->in_b, tb->in_b_valid);
+        A_state.update<c_rows, MESHROWS * TILEROWS, MESHROWS, TILEROWS>(A, tb->in_a, tb->in_a_valid);
+        D_state.update<c_rows, MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(D, tb->in_d, tb->in_d_valid);
+
         if (done) {
             break;
         }
@@ -325,7 +330,7 @@ int basic_matmul(Vsys_array* tb, VerilatedVcdC* tfp,
     return SUCCESS;
 }
 
-int test0_identity_matmul(Vsys_array* tb, VerilatedVcdC* tfp) {
+int test0_identity_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     const int c_rows = MESHROWS * TILEROWS;
     int A[c_rows][MESHROWS * TILEROWS];
     for (int i = 0; i < c_rows; i++) {
@@ -350,7 +355,35 @@ int test0_identity_matmul(Vsys_array* tb, VerilatedVcdC* tfp) {
         }
     }
 
-    return basic_matmul<c_rows>(tb, tfp, A, B, D, expected_C);
+    return basic_matmul<c_rows>(tickcount, tb, tfp, A, B, D, expected_C);
+}
+
+int test1_identity_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
+    const int c_rows = MESHROWS * TILEROWS;
+    int A[c_rows][MESHROWS * TILEROWS];
+    for (int i = 0; i < c_rows; i++) {
+        for (int j = 0; j < c_rows; j++) {
+            A[i][j] = i == j ? 1 : 0;
+        }
+    }
+
+    int B[MESHROWS * TILEROWS][MESHCOLS * TILECOLS];
+    for (int i = 0; i < MESHROWS * TILEROWS; i++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+            B[i][j] = i + j;
+        }
+    }
+    
+    int D[c_rows][MESHCOLS * TILECOLS];
+    int expected_C[c_rows][MESHCOLS * TILECOLS];
+    for (int i = 0; i < c_rows; i++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+            D[i][j] = 1;
+            expected_C[i][j] = i + j + 1;
+        }
+    }
+
+    return basic_matmul<c_rows>(tickcount, tb, tfp, A, B, D, expected_C);
 }
 
 int main(int argc, char** argv) {
@@ -358,13 +391,19 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Vsys_array* tb = new Vsys_array;
     Verilated::traceEverOn(true);
+    
+    int tickcount = 0;
     VerilatedVcdC* tfp = new VerilatedVcdC;
     tb->trace(tfp, 99);
     tfp->open("sys_array.vcd");
-
-    int res = test0_identity_matmul(tb, tfp);
+    
+    int res = test0_identity_matmul(tickcount, tb, tfp);
     printf("Test 0 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
 
+    res = test1_identity_matmul(tickcount, tb, tfp);
+    printf("Test 1 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
+    
     tfp->close();
+
     return 0;
 }
