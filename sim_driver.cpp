@@ -266,7 +266,7 @@ int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp,
     feeding_mat_state A_state(MESHROWS, TILEROWS, c_rows, true);
     feeding_mat_state B_state(MESHCOLS, TILECOLS, MESHROWS * TILEROWS, false);
     reading_mat_state C_state(MESHCOLS, TILECOLS, c_rows, true);
-    feeding_mat_state D_state(MESHCOLS, TILECOLS, c_rows, false);
+    feeding_mat_state D_state(MESHCOLS, TILECOLS, c_rows, true);
 
     // propagate B through array
     unsigned char propagate = 0;
@@ -362,8 +362,8 @@ int test1_identity_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     const int c_rows = MESHROWS * TILEROWS;
     int A[c_rows][MESHROWS * TILEROWS];
     for (int i = 0; i < c_rows; i++) {
-        for (int j = 0; j < c_rows; j++) {
-            A[i][j] = i == j ? 1 : 0;
+        for (int j = 0; j < MESHROWS * TILEROWS; j++) {
+            A[i][j] = (i == j ? 1 : 0);
         }
     }
 
@@ -378,13 +378,43 @@ int test1_identity_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     int expected_C[c_rows][MESHCOLS * TILECOLS];
     for (int i = 0; i < c_rows; i++) {
         for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
-            D[i][j] = 1;
-            expected_C[i][j] = i + j + 1;
+            D[i][j] = i + j;
+            expected_C[i][j] = 2 * (i + j);
         }
     }
 
     return basic_matmul<c_rows>(tickcount, tb, tfp, A, B, D, expected_C);
 }
+
+int test2_tall_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
+    const int c_rows = 10000;
+    int A[c_rows][MESHROWS * TILEROWS];
+    for (int i = 0; i < c_rows; i++) {
+        for (int j = 0; j < MESHROWS * TILEROWS; j++) {
+            A[i][j] = i + j;
+        }
+    }
+
+    int B[MESHROWS * TILEROWS][MESHCOLS * TILECOLS];
+    for (int i = 0; i < MESHROWS * TILEROWS; i++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+            B[i][j] = (i == j) ? 1 : 0;
+        }
+    }
+    
+    int D[c_rows][MESHCOLS * TILECOLS];
+    int expected_C[c_rows][MESHCOLS * TILECOLS];
+    for (int i = 0; i < c_rows; i++) {
+        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+            D[i][j] = i + j;
+            expected_C[i][j] = (i + j) + (i < c_rows ? i + j : 0);
+        }
+    }
+
+    return basic_matmul<c_rows>(tickcount, tb, tfp, A, B, D, expected_C);
+}
+
+
 
 int main(int argc, char** argv) {
 
@@ -402,6 +432,9 @@ int main(int argc, char** argv) {
 
     res = test1_identity_matmul(tickcount, tb, tfp);
     printf("Test 1 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
+
+    res = test2_tall_matmul(tickcount, tb, tfp);
+    printf("Test 2 (Tall matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
     
     tfp->close();
 

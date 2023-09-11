@@ -12,17 +12,20 @@ TILECOLS = 2
 
 all: veri sim
 
-sim:
-	g++ -g -I$(VINC) -I$(BUILD_DIR)/ $(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp sim_driver.cpp $(BUILD_DIR)/V$(ROOT)__ALL.a \
-	-DMESHROWS=$(MESHROWS) -DMESHCOLS=$(MESHCOLS) -DBITWIDTH=$(BITWIDTH) -DTILEROWS=$(TILEROWS) -DTILECOLS=$(TILECOLS) \
-	-o $(SIM_FILE)
-
 veri:
 	verilator -Wno-style \
 	-GMESHROWS=$(MESHROWS) -GMESHCOLS=$(MESHCOLS) -GBITWIDTH=$(BITWIDTH) -GTILEROWS=$(TILEROWS) -GTILECOLS=$(TILECOLS) \
 	--trace -cc $(INPUT_FILES)
 	cd $(BUILD_DIR); \
 	make -f V$(ROOT).mk;
+
+sim:
+	g++ -g -I$(VINC) -I$(BUILD_DIR)/ $(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp sim_driver.cpp $(BUILD_DIR)/V$(ROOT)__ALL.a \
+	-DMESHROWS=$(MESHROWS) -DMESHCOLS=$(MESHCOLS) -DBITWIDTH=$(BITWIDTH) -DTILEROWS=$(TILEROWS) -DTILECOLS=$(TILECOLS) \
+	-o $(SIM_FILE)
+
+test:
+	./$(SIM_FILE)
 
 clean:
 	rm -rf $(BUILD_DIR)
