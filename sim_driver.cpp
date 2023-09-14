@@ -3,6 +3,8 @@
 #include "Vsys_array.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
+#include <vector>
+#include <string>
 
 
 // RETURN VALUES
@@ -48,7 +50,18 @@ private:
     std::vector<mat_stage> mesh_unit_state;
     std::vector<int> mesh_unit_row;
     bool ordered_rows;
+    bool dummy;
+
 public:
+    feeding_mat_state(int mesh_size, int tile_size) {
+        this->mesh_size = mesh_size;
+        this->tile_size = tile_size;
+        this->mat_rows = 1;
+        this->mesh_unit_state.resize(mesh_size);
+        this->mesh_unit_row.resize(mesh_size);
+        this->ordered_rows = true;
+        this->dummy = true;
+    }
     feeding_mat_state(int mesh_size, int tile_size, int mat_rows, bool ordered_rows) {
         this->mesh_size = mesh_size;
         this->tile_size = tile_size;
@@ -56,10 +69,18 @@ public:
         this->mesh_unit_state.resize(mesh_size);
         this->mesh_unit_row.resize(mesh_size);
         this->ordered_rows = ordered_rows;
+        this->dummy = false;
     }
 
     // init state and kickoff feeding
     void start() {
+        if (this->dummy) {
+            for (int i = 0; i < mesh_size; i++) {
+                this->mesh_unit_state[i] = DONE;
+                this->mesh_unit_row[i] = 0;
+            }
+            return;
+        }
         int start_row = this->ordered_rows ? 0 : mat_rows - 1;
         for (int i = 0; i < mesh_size; i++) {
             this->mesh_unit_state[i] = WAITING;
@@ -139,7 +160,18 @@ private:
     std::vector<int> mesh_unit_row;
     bool ordered_rows;
     bool valid_state;
+    bool dummy;
 public:
+    reading_mat_state(int mesh_size, int tile_size) {
+        this->mesh_size = mesh_size;
+        this->tile_size = tile_size;
+        this->mat_rows = 1;
+        this->mesh_unit_state.resize(mesh_size);
+        this->mesh_unit_row.resize(mesh_size);
+        this->ordered_rows = true;
+        this->valid_state = false;
+        this->dummy = true;
+    }
     reading_mat_state(int mesh_size, int tile_size, int mat_rows, bool ordered_rows) {
         this->mesh_size = mesh_size;
         this->tile_size = tile_size;
@@ -148,10 +180,19 @@ public:
         this->mesh_unit_row.resize(mesh_size);
         this->ordered_rows = ordered_rows;
         this->valid_state = false;
+        this->dummy = false;
     }
 
     // init state and kickoff feeding
     void start() {
+        if (this->dummy) {
+            for (int i = 0; i < mesh_size; i++) {
+                this->mesh_unit_state[i] = DONE;
+                this->mesh_unit_row[i] = 0;
+            }
+            this->valid_state = true;
+            return;
+        }
         int start_row = this->ordered_rows ? 0 : mat_rows - 1;
         for (int i = 0; i < mesh_size; i++) {
             this->mesh_unit_state[i] = WAITING;
@@ -161,6 +202,9 @@ public:
     }
 
     bool valid() {
+        if (this->dummy) {
+            return true;
+        }
         return this->valid_state;
     }
 
@@ -335,6 +379,95 @@ int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int c_rows,
     return SUCCESS;
 }
 
+int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mats, std::vector<int> c_rows,
+                    std::vector<std::vector<std::vector<int>>>& A, std::vector<std::vector<std::vector<int>>>& B,
+                    std::vector<std::vector<std::vector<int>>>& D, std::vector<std::vector<std::vector<int>>>& expected_C) {
+
+    unsigned char propagate = 0;
+    for (int i = 0; i <= num_mats; i++) {
+        int collecting_idx = i - 1;
+        int loading_idx = i;
+        bool ignore_collecting = collecting_idx < 0;
+        bool ignore_loading = loading_idx >= num_mats;
+
+        feeding_mat_state A_state = feeding_mat_state(MESHROWS, TILEROWS);
+        feeding_mat_state B_state = feeding_mat_state(MESHCOLS, TILECOLS);
+        reading_mat_state C_state = reading_mat_state(MESHCOLS, TILECOLS);
+        feeding_mat_state D_state = feeding_mat_state(MESHCOLS, TILECOLS);
+
+        std::vector<std::vector<int>> A_mat;
+        std::vector<std::vector<int>> B_mat;
+        std::vector<std::vector<int>> C_mat;
+        std::vector<std::vector<int>> D_mat;
+
+        int collecting_c_rows = ignore_collecting ? 0 : c_rows[collecting_idx];
+        if (collecting_idx >= 0) {
+            A_state = feeding_mat_state(MESHROWS, TILEROWS, collecting_c_rows, true);
+            C_state = reading_mat_state(MESHCOLS, TILECOLS, collecting_c_rows, true);
+            D_state = feeding_mat_state(MESHCOLS, TILECOLS, collecting_c_rows, true);
+            A_mat = A[collecting_idx];
+            C_mat = std::vector<std::vector<int>>(collecting_c_rows, std::vector<int>(MESHCOLS * TILECOLS));
+            D_mat = D[collecting_idx];
+        }
+
+        if (loading_idx < num_mats) {
+            B_state = feeding_mat_state(MESHCOLS, TILECOLS, MESHROWS * TILEROWS, false);
+            B_mat = B[loading_idx];
+        }
+
+        A_state.start();
+        B_state.start();
+        C_state.start();
+        D_state.start();
+        int waiting_iters = 0;
+        while (true) {
+            tick(tickcount, tb, tfp);
+            
+            // propagate B signals
+            for (int i = 0; i < MESHCOLS; i++) {
+                for (int j = 0; j < TILECOLS; j++) {
+                    tb->in_propagate[i][j] = propagate;
+                    tb->in_b_shelf_life[i][j] = B_state.current_row(i) + 1;
+                }
+            }
+
+            // propagate inputs and read from output
+            bool a_done = A_state.update<MESHROWS * TILEROWS, MESHROWS, TILEROWS>(collecting_c_rows, A_mat, tb->in_a, tb->in_a_valid);
+            bool b_done = B_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(MESHROWS * TILEROWS, B_mat, tb->in_b, tb->in_b_valid);
+            bool c_done = C_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(collecting_c_rows, tb->out_c, tb->out_c_valid, C_mat);
+            bool d_done = D_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(collecting_c_rows, D_mat, tb->in_d, tb->in_d_valid);
+            bool c_valid = C_state.valid();
+
+            // wait until all inputs and outputs are done
+            if ((b_done && a_done && d_done)) {
+                waiting_iters++;
+                if (c_done) {
+                    break;
+                }
+            }
+
+            if (!c_valid || waiting_iters >= 10) {
+                return SIM_ERROR;
+            }
+        }
+        // alternate propagate for next iteration
+        propagate = !propagate;
+        
+        // verify output correctness
+        if (ignore_collecting) {
+            continue;
+        }
+        for (int i = 0; i < collecting_c_rows; i++) {
+            for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+                if (expected_C[collecting_idx][i][j] != C_mat[i][j]) {
+                    return SIM_ERROR;
+                }
+            }
+        }
+    }
+    return SUCCESS;
+}
+
 int main(int argc, char** argv) {
 
     Verilated::commandArgs(argc, argv);
@@ -411,7 +544,13 @@ int main(int argc, char** argv) {
         }
     }
 
-    int res = basic_matmul(tickcount, tb, tfp, c_rows, A, B, D, expected_C);
+    std::vector<int> c_rows_s = {c_rows, c_rows, c_rows, c_rows};
+    std::vector<std::vector<std::vector<int>>> As = {A, A, A, A};
+    std::vector<std::vector<std::vector<int>>> Bs = {B, B, B, B};
+    std::vector<std::vector<std::vector<int>>> Ds = {D, D, D, D};
+    std::vector<std::vector<std::vector<int>>> Cs = {expected_C, expected_C, expected_C, expected_C};
+
+    int res = multi_matmul(tickcount, tb, tfp, 4, c_rows_s, As, Bs, Ds, Cs);
     printf("Test 0 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
 
     tfp->close();
