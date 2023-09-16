@@ -3,11 +3,11 @@ module sys_array
     (
         input clock,
         input reset,
+        input in_dataflow,
         input signed [BITWIDTH-1:0] in_a[MESHROWS-1:0][TILEROWS-1:0],
         input in_a_valid[MESHROWS-1:0][TILEROWS-1:0],
         input signed [BITWIDTH-1:0] in_b[MESHCOLS-1:0][TILECOLS-1:0],
         input signed [BITWIDTH-1:0] in_d[MESHCOLS-1:0][TILECOLS-1:0],
-        input in_dataflow[MESHCOLS-1:0][TILECOLS-1:0],
         input in_propagate[MESHCOLS-1:0][TILECOLS-1:0],
         input [$clog2(MESHROWS * TILEROWS):0] in_b_shelf_life[MESHCOLS-1:0][TILECOLS-1:0],
         input in_b_valid[MESHCOLS-1:0][TILECOLS-1:0],
@@ -21,7 +21,6 @@ module sys_array
     reg inter_a_valid[MESHROWS-1:0][MESHCOLS:0][TILEROWS-1:0] /*verilator split_var*/;
     reg signed [BITWIDTH-1:0] inter_b[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
     reg signed [BITWIDTH-1:0] inter_d[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
-    reg signed inter_dataflow[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
     reg signed inter_propagate[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
     reg [$clog2(MESHROWS * TILEROWS):0] inter_b_shelf_life[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /* verilator split_var*/;
     reg inter_b_valid[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
@@ -41,7 +40,6 @@ module sys_array
             for (t = 0; t < TILECOLS; t++) begin
                 assign inter_b[0][l][t] = in_b[l][t];
                 assign inter_d[0][l][t] = in_d[l][t];
-                assign inter_dataflow[0][l][t] = in_dataflow[l][t];
                 assign inter_propagate[0][l][t] = in_propagate[l][t];
                 assign inter_b_shelf_life[0][l][t] = in_b_shelf_life[l][t];
                 assign inter_b_valid[0][l][t] = in_b_valid[l][t];
@@ -63,11 +61,11 @@ module sys_array
                 tile_instance (
                     .clock(clock),
                     .reset(reset),
+                    .in_dataflow(in_dataflow),
                     .in_a(inter_a[i][j]),
                     .in_a_valid(inter_a_valid[i][j]),
                     .in_b(inter_b[i][j]),
                     .in_d(inter_d[i][j]),
-                    .in_dataflow(inter_dataflow[i][j]),
                     .in_propagate(inter_propagate[i][j]),
                     .in_b_shelf_life(inter_b_shelf_life[i][j]),
                     .in_b_valid(inter_b_valid[i][j]),
@@ -76,7 +74,6 @@ module sys_array
                     .out_a_valid(inter_a_valid[i][j + 1]),
                     .out_b(inter_b[i + 1][j]),
                     .out_d(inter_d[i + 1][j]),
-                    .out_dataflow(inter_dataflow[i + 1][j]),
                     .out_propagate(inter_propagate[i + 1][j]),
                     .out_b_shelf_life(inter_b_shelf_life[i + 1][j]),
                     .out_b_valid(inter_b_valid[i + 1][j]),
@@ -92,11 +89,11 @@ module Tile
     (
         input clock,
         input reset,
+        input in_dataflow,
         input signed [BITWIDTH-1:0] in_a[TILEROWS-1:0],
         input in_a_valid[TILEROWS-1:0],
         input signed [BITWIDTH-1:0] in_b[TILECOLS-1:0],
         input signed [BITWIDTH-1:0] in_d[TILECOLS-1:0],
-        input in_dataflow[TILECOLS-1:0],
         input in_propagate[TILECOLS-1:0],
         input [$clog2(MESHROWS * TILEROWS):0] in_b_shelf_life[TILECOLS-1:0],
         input in_b_valid[TILECOLS-1:0],
@@ -105,7 +102,6 @@ module Tile
         output reg out_a_valid[TILECOLS-1:0],
         output reg signed [BITWIDTH-1:0] out_b[TILECOLS-1:0],
         output reg signed [BITWIDTH-1:0] out_d[TILECOLS-1:0],
-        output reg out_dataflow[TILECOLS-1:0],
         output reg out_propagate[TILECOLS-1:0],
         output reg [$clog2(MESHROWS * TILEROWS):0] out_b_shelf_life[TILECOLS-1:0],
         output reg out_b_valid[TILECOLS-1:0],
@@ -117,7 +113,6 @@ module Tile
     wire inter_a_valid[TILEROWS-1:0][TILECOLS:0] /*verilator split_var*/;
     wire signed [BITWIDTH-1:0] inter_b[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire signed [BITWIDTH-1:0] inter_d[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
-    wire signed inter_dataflow[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire signed inter_propagate[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire [$clog2(MESHROWS * TILEROWS):0] inter_b_shelf_life[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire inter_b_valid[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
@@ -141,7 +136,6 @@ module Tile
     for (l = 0; l < TILECOLS; l++) begin
         assign inter_b[0][l] = in_b[l];
         assign inter_d[0][l] = in_d[l];
-        assign inter_dataflow[0][l] = in_dataflow[l];
         assign inter_propagate[0][l] = in_propagate[l];
         assign inter_b_shelf_life[0][l] = in_b_shelf_life[l];
         assign inter_b_valid[0][l] = in_b_valid[l];
@@ -150,7 +144,6 @@ module Tile
         always @(posedge clock) begin
             out_b[l] <= inter_b[TILEROWS][l];
             out_d[l] <= inter_d[TILEROWS][l];
-            out_dataflow[l] <= inter_dataflow[TILEROWS][l];
             out_propagate[l] <= inter_propagate[TILEROWS][l];
             out_b_shelf_life[l] <= inter_b_shelf_life[TILEROWS][l];
             out_b_valid[l] <= inter_b_valid[TILEROWS][l];
@@ -168,11 +161,11 @@ module Tile
                 pe_instance (
                     .clock(clock),
                     .reset(reset),
+                    .in_dataflow(in_dataflow),
                     .in_a(inter_a[i][j]),
                     .in_a_valid(inter_a_valid[i][j]),
                     .in_b(inter_b[i][j]),
                     .in_d(inter_d[i][j]),
-                    .in_dataflow(inter_dataflow[i][j]),
                     .in_propagate(inter_propagate[i][j]),
                     .in_b_shelf_life(inter_b_shelf_life[i][j]),
                     .in_b_valid(inter_b_valid[i][j]),
@@ -181,7 +174,6 @@ module Tile
                     .out_a_valid(inter_a_valid[i][j + 1]),
                     .out_b(inter_b[i + 1][j]),
                     .out_d(inter_d[i + 1][j]),
-                    .out_dataflow(inter_dataflow[i + 1][j]),
                     .out_propagate(inter_propagate[i + 1][j]),
                     .out_b_shelf_life(inter_b_shelf_life[i + 1][j]),
                     .out_b_valid(inter_b_valid[i + 1][j]),
@@ -198,11 +190,11 @@ module PE
     (
         input clock,
         input reset,
+        input in_dataflow,
         input signed [BITWIDTH-1:0] in_a,
         input in_a_valid,
         input signed [BITWIDTH-1:0] in_b,
         input signed [BITWIDTH-1:0] in_d,
-        input in_dataflow,
         input in_propagate,
         input [$clog2(MESHROWS * TILEROWS):0] in_b_shelf_life,
         input in_b_valid,
@@ -211,13 +203,13 @@ module PE
         output out_a_valid,
         output signed [BITWIDTH-1:0] out_b,
         output signed [BITWIDTH-1:0] out_d,
-        output out_dataflow,
         output out_propagate,
         output [$clog2(MESHROWS * TILEROWS):0] out_b_shelf_life,
         output out_b_valid,
         output out_d_valid
     );
 
+    reg dataflow;
     reg signed [BITWIDTH-1:0] b0;
     reg signed [BITWIDTH-1:0] b1;
     reg valid0;
@@ -229,22 +221,50 @@ module PE
         if (reset) begin
             valid0 <= 0;
             valid1 <= 0;
+            dataflow <= in_dataflow;
         end
         else begin
-            b0 <= (!in_b_valid || in_b_shelf_life == 0 || in_propagate) ? b0 : in_b;
-            b1 <= (!in_b_valid || in_b_shelf_life == 0 || !in_propagate) ? b1 : in_b;
-            valid0 <= (!in_b_valid || in_b_shelf_life == 0 || in_propagate) ? valid0 : in_b_valid;
-            valid1 <= (!in_b_valid || in_b_shelf_life == 0 || !in_propagate) ? valid1 : in_b_valid;
-            shelf_life0 <= (!in_b_valid || in_b_shelf_life == 0 || in_propagate) ? shelf_life0 : in_b_shelf_life;
-            shelf_life1 <= (!in_b_valid || in_b_shelf_life == 0 || !in_propagate) ? shelf_life1 : in_b_shelf_life;
+            if (dataflow) begin
+                // weight-stationary dataflow
+                b0 <= (!in_b_valid || in_b_shelf_life == 0 || in_propagate) ? b0 : in_b;
+                b1 <= (!in_b_valid || in_b_shelf_life == 0 || !in_propagate) ? b1 : in_b;
+                valid0 <= (!in_b_valid || in_b_shelf_life == 0 || in_propagate) ? valid0 : in_b_valid;
+                valid1 <= (!in_b_valid || in_b_shelf_life == 0 || !in_propagate) ? valid1 : in_b_valid;
+                shelf_life0 <= (!in_b_valid || in_b_shelf_life == 0 || in_propagate) ? shelf_life0 : in_b_shelf_life;
+                shelf_life1 <= (!in_b_valid || in_b_shelf_life == 0 || !in_propagate) ? shelf_life1 : in_b_shelf_life;
+            end
+            else begin
+                // output stationary (accumulator) dataflow
+                if (in_b_valid && in_b_shelf_life > 0 && !in_propagate) begin
+                    b0 <= in_b;
+                    valid0 <= in_b_valid;
+                    shelf_life0 <= in_b_shelf_life;
+                end
+                else begin
+                    if (in_a_valid && in_d_valid)
+                        b0 <= b0 + (in_a * in_d);
+                    valid0 <= valid0;
+                    shelf_life0 <= shelf_life0;
+                end
+                if (in_b_valid && in_b_shelf_life > 0 && in_propagate) begin
+                    b1 <= in_b;
+                    valid1 <= in_b_valid;
+                    shelf_life1 <= in_b_shelf_life;
+                end
+                else begin
+                    if (in_a_valid && in_d_valid)
+                        b1 <= b1 + (in_a * in_d);
+                    valid1 <= valid1;
+                    shelf_life1 <= shelf_life1;
+                end
+            end
         end
     end
     
     assign out_a = in_a;
     assign out_a_valid = in_a_valid;
     assign out_b = (in_propagate ? b1 : b0);
-    assign out_d = in_d + in_a * (in_propagate ? b0 : b1);
-    assign out_dataflow = in_dataflow;
+    assign out_d = dataflow ? (in_d + in_a * (in_propagate ? b0 : b1)) : (in_propagate ? b0 : b1);
     assign out_propagate = in_propagate;
     assign out_b_shelf_life = (in_propagate ? (shelf_life1 == 0 ? 0 : shelf_life1 - 1)
                                             : (shelf_life0 == 0 ? 0 : shelf_life0 - 1));

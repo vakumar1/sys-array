@@ -385,6 +385,13 @@ int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mat
                     std::vector<std::vector<std::vector<int>>>& A, std::vector<std::vector<std::vector<int>>>& B,
                     std::vector<std::vector<std::vector<int>>>& D, std::vector<std::vector<std::vector<int>>>& expected_C) {
 
+     // init
+    tb->reset = 1;
+    tb->in_dataflow = 1;
+    tick(tickcount, tb, tfp);
+    tb->reset = 0;
+    tick(tickcount, tb, tfp);
+
     unsigned char propagate = 0;
     for (int i = 0; i <= num_mats; i++) {
         int collecting_idx = i - 1;
@@ -559,7 +566,7 @@ int main(int argc, char** argv) {
         expected_Cs.push_back(expected_C);
     }
 
-    int res = multi_matmul(tickcount, tb, tfp, 4, c_rows_s, As, Bs, Ds, expected_Cs);
+    int res = multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs);
     printf("Test %s\n", ((res == SUCCESS) ? "passed" : "failed"));
 
     tfp->close();
