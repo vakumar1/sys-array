@@ -5,17 +5,17 @@ ROOT = sys_array
 INPUT_FILES = sys_array.v
 
 BITWIDTH = 32
-MESHROWS = 4
-MESHCOLS = 4
-TILEROWS = 2
-TILECOLS = 2
+MESHROWS = 8
+MESHCOLS = 8
+TILEROWS = 8
+TILECOLS = 8
 
 all: veri sim
 
 veri:
 	verilator -Wno-style \
 	-GMESHROWS=$(MESHROWS) -GMESHCOLS=$(MESHCOLS) -GBITWIDTH=$(BITWIDTH) -GTILEROWS=$(TILEROWS) -GTILECOLS=$(TILECOLS) \
-	--trace -cc $(INPUT_FILES)
+	--trace --trace-max-bitwidth 2048 -cc $(INPUT_FILES)
 	cd $(BUILD_DIR); \
 	make -f V$(ROOT).mk;
 

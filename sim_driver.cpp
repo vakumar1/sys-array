@@ -12,7 +12,7 @@
 #define SIM_ERROR 1
 #define INTERNAL_ERROR 2
 
-// DEFAULT MESH PARAMETERS
+// DEFAULT MESH PARAMETERS: 256 mesh
 #ifndef BITWIDTH
 #define BITWIDTH 32
 #endif
@@ -22,7 +22,7 @@
 #endif
 
 #ifndef TILECOLS
-#define TILECOLS 1
+#define TILECOLS 4
 #endif
 
 #ifndef MESHROWS
@@ -30,7 +30,7 @@
 #endif
 
 #ifndef TILEROWS 
-#define TILEROWS 1
+#define TILEROWS 4
 #endif
 
 // INPUT MATRIX ENTRY MAX
@@ -102,7 +102,7 @@ public:
             case WAITING:
                 // feed in invalid signal to the array for each tile unit
                 for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
-                    out_valid[mesh_unit][tile_unit] = 0;
+                    out_valid[mesh_unit][tile_unit] = 0x00;
                 }
 
                 // update feeding to true if the previous mesh unit is feeding/done
@@ -115,7 +115,7 @@ public:
                 // feed in the input matrix (+ valid signal) to the array for each tile row in given mesh_row
                 for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
                     out_mat[mesh_unit][tile_unit] = in_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * tile_size + tile_unit];
-                    out_valid[mesh_unit][tile_unit] = 1;
+                    out_valid[mesh_unit][tile_unit] = 0xFF;
                 }
 
                 // incr input matrix row (and end feeding if complete)
@@ -135,7 +135,7 @@ public:
             case DONE:
                 // feed in invalid signal to the array for each tile row
                 for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
-                    out_valid[mesh_unit][tile_unit] = 0;
+                    out_valid[mesh_unit][tile_unit] = 0x00;
                 }
                 next_mesh_unit_state[mesh_unit] = DONE;
                 break;
@@ -220,9 +220,11 @@ public:
             // record valid signals and the output values (if valid)
             int valid_count = 0;
             for (int tile_unit = 0; tile_unit < tile_size; tile_unit++) {
-                if (in_valid[mesh_unit][tile_unit]) {
+                if (in_valid[mesh_unit][tile_unit] == 0xFF) {
                     out_mat[this->mesh_unit_row[mesh_unit]][mesh_unit * tile_size + tile_unit] = in_mat[mesh_unit][tile_unit];
                     valid_count++;
+                } else if (in_valid[mesh_unit][tile_unit] != 0x00) {
+                    invalid_mesh_unit[mesh_unit] = true;
                 }
             }
             if (valid_count != 0 && valid_count != tile_size) {
@@ -358,14 +360,14 @@ int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int c_rows,
                 tb->in_propagate[i][j] = propagate;
             }
         }
+        if (!c_valid || waiting_iters >= 10) {
+            return SIM_ERROR;
+        }
         if ((a_done && d_done)) {
             waiting_iters++;
             if (c_done) {
                 break;
             }
-        }
-        if (!c_valid || waiting_iters >= 10) {
-            return SIM_ERROR;
         }
     }
 
@@ -504,54 +506,61 @@ int main(int argc, char** argv) {
     }
 
     // TODO: support greater than 1 matrix for testing
-    int c_rows = height;
-    std::vector<std::vector<int>> A(c_rows, std::vector<int>(MESHROWS * TILEROWS));
-    for (int i = 0; i < c_rows; i++) {
-        for (int j = 0; j < MESHROWS * TILEROWS; j++) {
-            if (random) {
-                A[i][j] = rand() % MAX_INP;
-            } else {
-                A[i][j] = i + j;
+
+    std::vector<int> c_rows_s;
+    std::vector<std::vector<std::vector<int>>> As;
+    std::vector<std::vector<std::vector<int>>> Bs;
+    std::vector<std::vector<std::vector<int>>> Ds;
+    std::vector<std::vector<std::vector<int>>> expected_Cs;
+    for (int test = 0; test < num_mats; test++) {
+        int c_rows = height;
+        c_rows_s.push_back(c_rows);
+        std::vector<std::vector<int>> A(c_rows, std::vector<int>(MESHROWS * TILEROWS));
+        for (int i = 0; i < c_rows; i++) {
+            for (int j = 0; j < MESHROWS * TILEROWS; j++) {
+                if (random) {
+                    A[i][j] = rand() % MAX_INP;
+                } else {
+                    A[i][j] = i + j;
+                }
             }
         }
-    }
 
-    std::vector<std::vector<int>> B(MESHROWS * TILEROWS, std::vector<int>(MESHCOLS * TILECOLS));
-    for (int i = 0; i < MESHROWS * TILEROWS; i++) {
-        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
-            if (identity) {
-                B[i][j] = (i == j) ? 1 : 0;
-            } else {
-                B[i][j] = rand() % MAX_INP;
+        std::vector<std::vector<int>> B(MESHROWS * TILEROWS, std::vector<int>(MESHCOLS * TILECOLS));
+        for (int i = 0; i < MESHROWS * TILEROWS; i++) {
+            for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+                if (identity) {
+                    B[i][j] = (i == j) ? 1 : 0;
+                } else {
+                    B[i][j] = rand() % MAX_INP;
+                }
             }
         }
-    }
-    
-    std::vector<std::vector<int>> expected_C(c_rows, std::vector<int>(MESHCOLS * TILECOLS));
-    std::vector<std::vector<int>> D(c_rows, std::vector<int>(MESHCOLS * TILECOLS));
+        
+        std::vector<std::vector<int>> expected_C(c_rows, std::vector<int>(MESHCOLS * TILECOLS));
+        std::vector<std::vector<int>> D(c_rows, std::vector<int>(MESHCOLS * TILECOLS));
 
-    for (int i = 0; i < c_rows; i++) {
-        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
-            if (affine) {
-                D[i][j] = rand() % MAX_INP;
-            } else {
-                D[i][j] = 0;
-            }
-            expected_C[i][j] = D[i][j];
-            for (int k = 0; k < MESHROWS * TILEROWS; k++) {
-                expected_C[i][j] += A[i][k] * B[k][j];
+        for (int i = 0; i < c_rows; i++) {
+            for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
+                if (affine) {
+                    D[i][j] = rand() % MAX_INP;
+                } else {
+                    D[i][j] = 0;
+                }
+                expected_C[i][j] = D[i][j];
+                for (int k = 0; k < MESHROWS * TILEROWS; k++) {
+                    expected_C[i][j] += A[i][k] * B[k][j];
+                }
             }
         }
+        As.push_back(A);
+        Bs.push_back(B);
+        Ds.push_back(D);
+        expected_Cs.push_back(expected_C);
     }
 
-    std::vector<int> c_rows_s = {c_rows, c_rows, c_rows, c_rows};
-    std::vector<std::vector<std::vector<int>>> As = {A, A, A, A};
-    std::vector<std::vector<std::vector<int>>> Bs = {B, B, B, B};
-    std::vector<std::vector<std::vector<int>>> Ds = {D, D, D, D};
-    std::vector<std::vector<std::vector<int>>> Cs = {expected_C, expected_C, expected_C, expected_C};
-
-    int res = multi_matmul(tickcount, tb, tfp, 4, c_rows_s, As, Bs, Ds, Cs);
-    printf("Test 0 (Identity matmul) %s\n", ((res == SUCCESS) ? "passed" : "failed"));
+    int res = multi_matmul(tickcount, tb, tfp, 4, c_rows_s, As, Bs, Ds, expected_Cs);
+    printf("Test %s\n", ((res == SUCCESS) ? "passed" : "failed"));
 
     tfp->close();
     return 0;
