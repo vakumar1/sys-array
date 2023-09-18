@@ -4,11 +4,9 @@ ROOT = sys_array
 
 HARDWARE_FILES = hardware/sys_array.v
 SRC_DIR = software/src/
-SRC_FILES = software/src/matrix_state.cpp 
-UTILS_FILES = software/src/utils.cpp 
-OUTPUT_SRC_FILE = src.o
-OUTPUT_UTILS_FILE = utils.o
-TEST_FILES = software/test/sim_driver.cpp
+SRC_FILES = software/src/matrix_state.cpp
+TEST_DIR = software/test/
+TEST_FILES = software/test/utils.cpp software/test/sim_driver.cpp
 OUTPUT_SIM_FILE = simulation
 
 BITWIDTH = 32
@@ -27,9 +25,9 @@ veri:
 	make -f V$(ROOT).mk;
 
 sim:
-	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) \
+	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
 	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
-	$(UTILS_FILES) $(SRC_FILES) $(TEST_FILES) $(BUILD_DIR)/V$(ROOT)__ALL.a \
+	$(SRC_FILES) $(TEST_FILES) $(BUILD_DIR)/V$(ROOT)__ALL.a \
 	-DMESHROWS=$(MESHROWS) -DMESHCOLS=$(MESHCOLS) -DBITWIDTH=$(BITWIDTH) -DTILEROWS=$(TILEROWS) -DTILECOLS=$(TILECOLS) \
 	-o $(OUTPUT_SIM_FILE)
 
