@@ -37,7 +37,7 @@
 #endif
 
 // INPUT MATRIX ENTRY MAX
-#define MAX_INP (1 << ((BITWIDTH / 2) - 1)) / (MESHROWS * TILEROWS)
+#define MAX_INP (1 << ((BITWIDTH / 2) - 2)) / (MESHROWS * TILEROWS)
 
 int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int c_rows,
                     std::vector<std::vector<int>>& A, std::vector<std::vector<int>>& B,
@@ -229,6 +229,7 @@ int main(int argc, char** argv) {
     bool random = false;
     bool identity = false;
     bool affine = false;
+    bool negative = false;
     
     for (int i = 1; i < argc; i++) {
         std::string flag = argv[i];
@@ -244,6 +245,8 @@ int main(int argc, char** argv) {
             identity = true;
         } else if (flag == "--affine") {
             affine = true;
+        } else if (flag == "--negative") {
+            negative = true;
         }
     }
 
@@ -264,6 +267,9 @@ int main(int argc, char** argv) {
                     A[i][j] = rand() % MAX_INP;
                 } else {
                     A[i][j] = i + j;
+                }
+                if (negative) {
+                    A[i][j] = -A[i][j];
                 }
             }
         }
@@ -302,7 +308,9 @@ int main(int argc, char** argv) {
     }
 
     int res = multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs);
-    printf("Test %s\n", ((res == SUCCESS) ? "passed" : "failed"));
+    printf("Test %s: num_mats=%d height=%d rand=%d id=%d aff=%d neg=%d\n", 
+            ((res == SUCCESS) ? "passed" : "failed"),
+            num_mats, height, random, identity, affine, negative);
 
     tfp->close();
     return 0;

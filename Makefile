@@ -32,7 +32,15 @@ sim:
 	-o $(OUTPUT_SIM_FILE)
 
 test:
-	./$(OUTPUT_SIM_FILE)
+	for num_mats in 1 10 50; do \
+		for height in 10 100 500; do \
+			./$(OUTPUT_SIM_FILE) --num-mats $$num_mats --height $$height --identity && \
+			./$(OUTPUT_SIM_FILE) --num-mats $$num_mats --height $$height --random && \
+			./$(OUTPUT_SIM_FILE) --num-mats $$num_mats --height $$height --random --affine && \
+			./$(OUTPUT_SIM_FILE) --num-mats $$num_mats --height $$height --random --affine --negative; \
+		done \
+		; \
+	done
 
 clean:
 	rm -rf $(BUILD_DIR)
