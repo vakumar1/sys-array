@@ -1,5 +1,4 @@
-#include "Vsys_array.h"
-#include "verilated.h"
-#include "verilated_vcd_c.h"
-
-void tick(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp);
+// RETURN VALUES
+#define SUCCESS 0
+#define SIM_ERROR 1
+#define INTERNAL_ERROR 2

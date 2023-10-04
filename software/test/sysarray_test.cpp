@@ -9,12 +9,6 @@
 #include <vector>
 #include <string>
 
-
-// RETURN VALUES
-#define SUCCESS 0
-#define SIM_ERROR 1
-#define INTERNAL_ERROR 2
-
 // DEFAULT MESH PARAMETERS: 256 mesh
 #ifndef BITWIDTH
 #define BITWIDTH 32
@@ -38,6 +32,23 @@
 
 // INPUT MATRIX ENTRY MAX
 #define MAX_INP (1 << ((BITWIDTH / 2) - 2)) / (MESHROWS * TILEROWS)
+
+void tick(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
+    tb->eval();
+    if (tickcount > 0) {
+        if (tfp)
+            tfp->dump(tickcount * 10 - 2);
+    }
+    tb->clock = 1;
+    tb->eval();
+    if (tfp)
+        tfp->dump(tickcount * 10);
+    tb->clock = 0;
+    tb->eval();
+    if (tfp)
+        tfp->dump(tickcount * 10 + 5);
+    tickcount++;
+}
 
 int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int c_rows,
                     std::vector<std::vector<int>>& A, std::vector<std::vector<int>>& B,

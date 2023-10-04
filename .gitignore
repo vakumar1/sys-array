@@ -1,6 +1,6 @@
 obj_dir/
 *.vcd
 *.o
-simulation
+*_simulation
 .vscode/
 linux/
