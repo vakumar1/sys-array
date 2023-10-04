@@ -7,7 +7,9 @@ module uart_transmitter
         input data_in_valid,
 
         output serial_out,
-        input cts
+        input cts,
+
+        output tx_running
     );
 
     parameter 
@@ -17,7 +19,7 @@ module uart_transmitter
         FINISH = 2'b11;
 
     // update tick counter on each clock edge
-    reg [$clog2(SYMBOL_EDGE_TIME):0] tick_ctr;
+    reg [31:0] tick_ctr;
     always @(posedge clock) begin
         if (reset)
             tick_ctr <= 0;
@@ -27,15 +29,11 @@ module uart_transmitter
 
     // update transmitter state on each symbol edge
     reg [1:0] state;
-    reg [3:0] bit_pos;
+    reg [2:0] bit_pos;
     reg [7:0] buffer;
-    reg out_bit;
     always @(posedge clock) begin
         if (reset) begin
             state <= WAITING;
-            bit_pos <= 0;
-            buffer <= 0;
-            out_bit <= 1;
         end
         else if (tick_ctr == SYMBOL_EDGE_TIME - 1) begin            
             case (state)
@@ -44,28 +42,35 @@ module uart_transmitter
                         state <= START;
                         buffer <= data_in;
                     end
-                    out_bit <= 1;
                 end
                 START: begin
                     state <= WRITING;
                     bit_pos <= 7;
-                    out_bit <= 0;
                 end
                 WRITING: begin
                     if (bit_pos == 0)
                         state <= FINISH;
                     if (bit_pos > 0)
                         bit_pos <= bit_pos - 1;
-                    out_bit <= buffer[bit_pos];
                 end
                 FINISH: begin
                     state <= WAITING;
-                    out_bit <= 0;
+                end
+                default: begin
+                    state <= WAITING;
                 end
             endcase
         end
     end
-    assign serial_out = out_bit;
+    
+    // assign serial out based on state + bit_pos
+    assign serial_out = 
+        state == WAITING        ? 1
+            : state == START    ? 0
+            : state == WRITING  ? buffer[bit_pos]
+            : state == FINISH   ? 0
+            : 1;
+    assign tx_running = state != WAITING;
 
 endmodule
 

@@ -17,11 +17,16 @@ module uart
         output serial_out,
 
         // flow control
+        input local_ready, // local system is ready
         input cts, // CTS (remote RX is clear to send)
         output rts // RTS (local RX requests to send)
     );
 
     localparam SYMBOL_EDGE_TIME = CLOCK_FREQ / BAUD_RATE;
+
+    // share tx_running between transmitter/receiver
+    // to stop receiver when transmitter is running
+    wire tx_running;
 
     uart_transmitter #(SYMBOL_EDGE_TIME)
     uart_tx (
@@ -30,8 +35,9 @@ module uart
         .data_in(data_in),
         .data_in_valid(data_in_valid),
         .serial_out(serial_out),
-        .cts(cts)
-    )
+        .cts(cts),
+        .tx_running(tx_running)
+    );
 
     uart_receiver #(SYMBOL_EDGE_TIME)
     uart_rx (
@@ -40,7 +46,8 @@ module uart
         .data_out(data_out),
         .data_out_valid(data_out_valid),
         .serial_in(serial_in),
-        .rts(rts)
+        .rts(rts),
+        .uart_ready(!tx_running && local_ready)
     );
 
 endmodule
