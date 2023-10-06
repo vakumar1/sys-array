@@ -23,16 +23,38 @@ UART_SRC_FILES =
 UART_TEST_FILES = software/test/uart_test.cpp
 UART_SIM_FILE = uart_simulation
 
+# fifo tests
+FIFO_TST_NAME = fifo
+FIFO_HARDWARE_FILES = hardware/comms/fifo.v
+FIFO_SRC_FILES = 
+FIFO_TEST_FILES = software/test/fifo_test.cpp
+FIFO_SIM_FILE = fifo_simulation
+
 
 all: veri sim
 
 veri: veri-array veri-uart
 
+sim: sim-array sim-uart
+
+uart: veri-uart sim-uart
+
+fifo: veri-fifo sim-fifo
+
+sys_array: veri-array sim-array
+
+# BUILD VERILATOR
 veri-uart:
 	verilator -Wno-style \
 	--trace -cc $(UART_HARDWARE_FILES)
 	cd $(BUILD_DIR); \
 	make -f V$(UART_TST_NAME).mk;
+
+veri-fifo:
+	verilator -Wno-style \
+	--trace -cc $(FIFO_HARDWARE_FILES)
+	cd $(BUILD_DIR); \
+	make -f V$(FIFO_TST_NAME).mk;
 
 veri-array:
 	verilator -Wno-style \
@@ -41,8 +63,7 @@ veri-array:
 	cd $(BUILD_DIR); \
 	make -f V$(ARRAY_TST_NAME).mk;
 
-sim: sim-array sim-uart
-
+# BUILD SIMULATION
 sim-array:
 	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
 	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
@@ -56,8 +77,13 @@ sim-uart:
 	$(UART_SRC_FILES) $(UART_TEST_FILES) $(BUILD_DIR)/V$(UART_TST_NAME)__ALL.a \
 	-o $(UART_SIM_FILE)
 
-test: test-array test-uart
+sim-fifo:
+	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
+	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
+	$(FIFO_SRC_FILES) $(FIFO_TEST_FILES) $(BUILD_DIR)/V$(FIFO_TST_NAME)__ALL.a \
+	-o $(FIFO_SIM_FILE)
 
+# RUN TESTS
 test-array:
 	for num_mats in 1 10 50; do \
 		for height in 10 100 500; do \
@@ -72,7 +98,12 @@ test-array:
 test-uart:
 	./$(UART_SIM_FILE)
 
+test-fifo:
+	./$(FIFO_SIM_FILE)
+
 clean:
-	rm -rf $(BUILD_DIR)
-	rm $(ARRAY_SIM_FILE)
-	rm $(UART_SIM_FILE)
+	- rm -rf $(BUILD_DIR)
+	- rm $(ARRAY_SIM_FILE)
+	- rm $(UART_SIM_FILE)
+	- rm $(FIFO_SIM_FILE)
+	- rm *.vcd
