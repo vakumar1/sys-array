@@ -261,8 +261,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // TODO: support greater than 1 matrix for testing
-
     std::vector<int> c_rows_s;
     std::vector<std::vector<std::vector<int>>> As;
     std::vector<std::vector<std::vector<int>>> Bs;

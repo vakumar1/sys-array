@@ -1,6 +1,6 @@
 module sys_array_controller
     #(
-        parameter BITWIDTH, ADDRWIDTH, MESHUNITS, TILEUNITS
+        parameter BITWIDTH, MESHUNITS, TILEUNITS
     )
     (
         input clock,
@@ -8,15 +8,15 @@ module sys_array_controller
 
         // COMP CONTROL SIGNALS
         input comp_lock_req [1:0],
-        input [ADDRWIDTH-1:0] A_addr [1:0],
-        input [ADDRWIDTH-1:0] D_addr [1:0],
-        input [ADDRWIDTH-1:0] C_addr [1:0],
+        input [BITWIDTH-1:0] A_addr [1:0],
+        input [BITWIDTH-1:0] D_addr [1:0],
+        input [BITWIDTH-1:0] C_addr [1:0],
         output comp_lock_res [1:0], // will never have "1"s overlap with load_lock_res
         output comp_finished,
 
         // LOAD CONTROL SIGNALS
         input load_lock_req [1:0],
-        input [ADDRWIDTH-1:0] b_addr [1:0],
+        input [BITWIDTH-1:0] B_addr [1:0],
         output load_lock_res [1:0], // will never have "1"s overlap with comp_lock_res
         output load_finished,
 
@@ -24,60 +24,96 @@ module sys_array_controller
         input signed [BITWIDTH-1:0] A [MESHUNITS-1:0][TILEUNITS-1:0],
         input signed [BITWIDTH-1:0] D [MESHUNITS-1:0][TILEUNITS-1:0],
         input signed [BITWIDTH-1:0] B [MESHUNITS-1:0][TILEUNITS-1:0],
-        output [ADDRWIDTH-1:0] A_row_read_addrs [MESHUNITS-1:0],
-        output [ADDRWIDTH-1:0] D_col_read_addrs [MESHUNITS-1:0],
-        output [ADDRWIDTH-1:0] B_col_read_addrs [MESHUNITS-1:0],
+        output [BITWIDTH-1:0] A_row_read_addrs [MESHUNITS-1:0],
+        output [BITWIDTH-1:0] D_col_read_addrs [MESHUNITS-1:0],
+        output [BITWIDTH-1:0] B_col_read_addrs [MESHUNITS-1:0],
+        output A_read_valid [MESHUNITS-1:0],
+        output D_read_valid [MESHUNITS-1:0],
+        output B_read_valid [MESHUNITS-1:0],
 
         // MEMORY WRITE SIGNALS
         output [BITWIDTH-1:0] C [MESHUNITS-1:0][TILEUNITS-1:0],
-        output [ADDRWIDTH-1:0] C_col_write_addrs [MESHUNITS-1:0],
-        output C_write_valid [MESHUNITS-1]
+        output [BITWIDTH-1:0] C_col_write_addrs [MESHUNITS-1:0],
+        output C_write_valid [MESHUNITS-1:0]
     );
 
-    localparam 
-        LOCK_FREE = 2'b00,
-        LOCK_ZERO = 2'b01,
-        LOCK_ONE = 2'b10;
-
     // COMP STATE
-    reg [1:0] comp_lock;
-    reg [31:0] comp_tick_ctr;
+    wire COMP_LOCK_FREE = ~comp_lock[0] & ~comp_lock[1];
+    wire COMP_LOCK_ZERO = comp_lock[0];
+    wire COMP_LOCK_ONE = comp_lock[1];
+    reg comp_lock [1:0];
+    reg [BITWIDTH-1:0] comp_tick_ctr;
     reg comp_complete;
-    reg [ADDRWIDTH-1:0] A_base_addr;
-    reg [ADDRWIDTH-1:0] D_base_addr;
-    wire A_valid [MESHUNITS-1:0][TILEUNITS-1:0];
-    wire D_valid [MESHUNITS-1:0][TILEUNITS-1:0];
-    reg [ADDRWIDTH-1:0] C_base_addr;
-    wire [BITWIDTH-1:0] C_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
-    wire C_valid_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg [BITWIDTH-1:0] A_base_addr;
+    reg [BITWIDTH-1:0] D_base_addr;
+    reg [BITWIDTH-1:0] C_base_addr;
+
+    // COMP MEMORY INPUT SIGNALS
+    reg [BITWIDTH-1:0] A_row_read_addrs_buffer [MESHUNITS-1:0];
+    reg [BITWIDTH-1:0] D_col_read_addrs_buffer [MESHUNITS-1:0];
+    reg A_read_valid_buffer [MESHUNITS-1:0];
+    reg D_read_valid_buffer [MESHUNITS-1:0];
+
+    // COMP MEMORY OUTPUT SIGNALS
+    reg [BITWIDTH-1:0] C_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg [BITWIDTH-1:0] C_col_write_addrs_buffer [MESHUNITS-1:0];
+    reg C_write_valid_buffer [MESHUNITS-1:0];
+
+    // COMP ARRAY INPUT SIGNALS
+    reg array_A_valid [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg array_D_valid [MESHUNITS-1:0][TILEUNITS-1:0];
+
+    // COMP ARRAY OUTPUT SIGNALS
+    reg [BITWIDTH-1:0] array_C [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg array_C_valid [MESHUNITS-1:0][TILEUNITS-1:0];
 
     // LOAD STATE
-    reg [1:0] load_lock;
-    reg [31:0] load_tick_ctr;
+    wire LOAD_LOCK_FREE = ~load_lock[0] & ~load_lock[1];
+    wire LOAD_LOCK_ZERO = load_lock[0];
+    wire LOAD_LOCK_ONE = load_lock[1];
+    reg load_lock [1:0];
+    reg [BITWIDTH-1:0] load_tick_ctr;
     reg load_complete;
-    reg [ADDRWIDTH-1:0] B_base_addr;
-    wire B_valid [MESHUNITS-1:0][TILEUNITS-1:0];
-    wire [$clog2(MESHUNITS * TILEUNITS):0] B_shelf_life [MESHUNITS-1:0][TILEUNITS-1:0];
-    wire B_propagate [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg [BITWIDTH-1:0] B_base_addr;
+
+    // LOAD MEMORY SIGNALS
+    reg [BITWIDTH-1:0] B_col_read_addrs_buffer [MESHUNITS-1:0];
+    reg B_read_valid_buffer [MESHUNITS-1:0];
+
+    // LOAD ARRAY INPUT SIGNALS
+    reg B_valid [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg [BITWIDTH-1:0] B_shelf_life [MESHUNITS-1:0][TILEUNITS-1:0];
+    reg B_propagate [MESHUNITS-1:0][TILEUNITS-1:0];
+
+
 
     always @(*) begin
 
         //
         // COMP LOGIC
         //
-
-        if (comp_lock == LOCK_FREE) begin
-            A_row_read_addrs = 0;
-            D_row_read_addrs = 0;
-            A_valid = 0;
-            D_valid = 0;
-            C = 0;
-            C_col_write_addrs = 0;
-            C_write_valid = 0;
+        integer i, j;
+        if (COMP_LOCK_FREE) begin
+            for (i = 0; i < MESHUNITS; i++) begin
+                A_row_read_addrs_buffer[i] = 0;
+                D_col_read_addrs_buffer[i] = 0;
+                A_read_valid_buffer[i] = 0;
+                D_read_valid_buffer[i] = 0;
+                for (j = 0; j < TILEUNITS; j++) begin
+                    array_A_valid[i][j] = 0;
+                    array_D_valid[i][j] = 0;
+                end
+                
+                C_col_write_addrs_buffer[i] = 0;
+                C_write_valid_buffer[i] = 0;
+                for (j = 0; j < TILEUNITS; j++) begin
+                    C_buffer[i][j] = 0;
+                end
+            end
         end
         else begin
-            // READ COMP ADDRS (A, D)
-            genvar i, j;
+
+            // READ COMP (A, D) SIGNALS: MEM + ARRAY
             for (i = 0; i < MESHUNITS; i++) begin
                 // row/col i of the sys array receives an input signal
                 // iff k <= i < k + (MU * TU)
@@ -85,215 +121,236 @@ module sys_array_controller
                 if (comp_tick_ctr >= i && comp_tick_ctr < (MESHUNITS * TILEUNITS) + i) begin
                     // at counter k read from addr:
                     // A/D[k - i][i] = A/D_base_addr + (k - i) * (MU * TU) + i * (TU)
-                    A_row_read_addrs[i] = A_base_addr + (comp_tick_ctr - i) * MESHUNITS * TILEUNITS + i * TILEUNITS;
-                    D_row_read_addrs[i] = D_base_addr + (comp_tick_ctr - i) * MESHUNITS * TILEUNITS + i * TILEUNITS;
+                    A_row_read_addrs_buffer[i] = A_base_addr + (comp_tick_ctr - i) * MESHUNITS * TILEUNITS + i * TILEUNITS;
+                    D_col_read_addrs_buffer[i] = D_base_addr + (comp_tick_ctr - i) * MESHUNITS * TILEUNITS + i * TILEUNITS;
+                    A_read_valid_buffer[i] = 1;
+                    D_read_valid_buffer[i] = 1;
+                    for (j = 0; j < TILEUNITS; j++) begin
+                        array_A_valid[i][j] = 1;
+                        array_D_valid[i][j] = 1;
+                    end
+                    
                 end
                 else begin
-                    A_row_read_addrs[i] = 0;
-                    D_row_read_addrs[i] = 0;
-                end
-            end
-
-            // READ COMP VALID (TO SYS ARRAY)
-            if (comp_tick_ctr == 0) begin
-                A_valid = 0;
-                D_valid = 0;
-            end
-            else begin
-                // determine validity of input signal from previous rules applied to 
-                // counter - 1 (since we read from mem on the following cycle)
-                wire [31:0] prev_comp_tick_ctr = comp_tick_ctr - 1;
-                for (i = 0; i < MESHUNITS; i++) begin
+                    A_row_read_addrs_buffer[i] = 0;
+                    D_col_read_addrs_buffer[i] = 0;
+                    A_read_valid_buffer[i] = 0;
+                    D_read_valid_buffer[i] = 0;
                     for (j = 0; j < TILEUNITS; j++) begin
-                        if (prev_comp_tick_ctr >= i && prev_comp_tick_ctr < (MESHUNITS * TILEUNITS) + i) begin
-                            A_valid[i][j] = 1;
-                            D_valid[i][j] = 1;
-                        end
-                        else begin
-                            A_valid[i][j] = 0;
-                            D_valid[i][j] = 0;
-                        end
+                        array_A_valid[i][j] = 0;
+                        array_D_valid[i][j] = 0;
                     end
                 end
             end
 
-            // WRITE ADDR (C)
+            // WRITE ADDR + VALID (C) SIGNALS: MEM
             for (i = 0; i < MESHUNITS; i++) begin
                 // col i of the sys array produces a valid output signal
-                // iff (k - (MU + 1)) <= i < (k - (MU + 1)) + (MU * TU)
-                // i.e., col i start writing MU * TU values at counter k = i + (MU + 1)
-                // note that this is MU + 1 greater than the read signal start 
-                // (1 cycle to read input from memory + MU cycles to propagate)
-                if (comp_tick_ctr >= (MESHUNITS + 1 + i) && comp_tick_ctr < ((MESHUNITS + 1 + i) + (MESHUNITS * TILEUNITS))) begin
-                    C_col_write_addrs[i] = C_base_addr + (comp_tick_ctr - (MESHUNITS + 1 + i)) * MESHUNITS * TILEUNITS + i * TILEUNITS;
-                    C_write_valid[i] = C_valid_buffer[i];
+                // iff (k - MU) <= i < (k - MU) + (MU * TU)
+                // i.e., col i start writing MU * TU values at counter k = i + MU
+                // note that this is MU greater than the read signal start MU cycles to propagate
+                if (comp_tick_ctr >= (MESHUNITS + i) && comp_tick_ctr < ((MESHUNITS + i) + (MESHUNITS * TILEUNITS))) begin
+                    C_col_write_addrs_buffer[i] = C_base_addr + (comp_tick_ctr - (MESHUNITS + i)) * MESHUNITS * TILEUNITS + i * TILEUNITS;
+                    C_write_valid_buffer[i] = 1;
+                    for (j = 0; j < TILEUNITS; j++) begin
+                        C_buffer[i][j] = array_C[i][j];
+                        if (!array_C_valid[i][j])
+                            C_write_valid_buffer[i] = 0;
+                    end
                 end
                 else begin
-                    C_col_write_addrs[i] = 0;
-                    C_write_valid = 0;
+                    C_col_write_addrs_buffer[i] = 0;
+                    C_write_valid_buffer[i] = 0;
+                    for (j = 0; j < TILEUNITS; j++) begin
+                        C_buffer[i][j] = 0;
+                    end
                 end
             end
-            C = C_buffer;
         end
 
         // COMP COMPLETE on the cycle after the final C write goes through
-        // --> k = ((MU + 1 + i) + (MU * TU)), i = final col (MU - 1)
-        // --> k = ((MU + 1 + MU - 1)) + (MU * TU)
+        // --> k = ((MU + i) + (MU * TU)) + 1, i = final col (MU - 1)
+        // --> k = ((MU + MU - 1)) + (MU * TU) + 1
         // --> k = MU * (2 + TU)
-        comp_complete = comp_tick_ctr == MESHUNITS * (2 + TILEUNITS)
+        comp_complete = comp_tick_ctr == MESHUNITS * (2 + TILEUNITS) - 1;
 
         //
         // LOAD LOGIC
         //
 
-        if (load_lock == LOCK_FREE) begin
-            B_row_read_addrs = 0;
-            B_valid = 0;
-            B_shelf_life = 0;
-            B_propagate = 0;
+        if (LOAD_LOCK_FREE) begin
+            for (i = 0; i < MESHUNITS; i++) begin
+                B_col_read_addrs_buffer[i] = 0;
+                B_read_valid_buffer[i] = 0;
+                for (j = 0; j < TILEUNITS; j++) begin
+                    B_valid[i][j] = 0;
+                    B_shelf_life[i][j] = 0;
+                end
+            end
         end
         else begin
-            // READ LOAD ADDR (B)
+            // READ LOAD (B) SIGNALS: MEM + ARRAY
             for (i = 0; i < MESHUNITS; i++) begin
                 // col i of the sys array receives an input signal
                 // iff l <= i < l + (MU * TU)
                 // i.e., col i starts reading MU * TU values at counter l = i
                 if (load_tick_ctr >= i && load_tick_ctr < (MESHUNITS * TILEUNITS) + i) begin
                     // at counter l read from addr:
-                    // B[k - i][i] = B_base_addr + (k - i) * (MU * TU) + i * (TU)
-                    B_row_read_addrs[i] = B_base_addr + (load_tick_ctr - i) * MESHUNITS * TILEUNITS + i * TILEUNITS;
-                end
-                else begin
-                    B_row_read_addrs[i] = 0;
-                end
-            end
-
-            // READ LOAD VALID + SHELF LIFE + PROPAGATE (TO SYS ARRAY)
-            if (load_tick_ctr == 0) begin
-                B_valid = 0;
-                B_shelf_life = 0;
-                B_propagate = 0;
-            end
-            else begin
-                // determine validity of input signal from previous rules applied to 
-                // counter - 1 (since we read from mem on the following cycle)
-                wire [31:0] prev_load_tick_ctr = load_tick_ctr - 1;
-                for (i = 0; i < MESHUNITS; i++) begin
+                    // B[(MU * TU - 1) - (k - i)][i] = B_base_addr + (k - i) * (MU * TU) + i * (TU)
+                    B_col_read_addrs_buffer[i] = B_base_addr + ((MESHUNITS * TILEUNITS - 1) - (load_tick_ctr - i)) * MESHUNITS * TILEUNITS + i * TILEUNITS;
+                    B_read_valid_buffer[i] = 1;
                     for (j = 0; j < TILEUNITS; j++) begin
-                        if (prev_load_tick_ctr >= i && prev_load_tick_ctr < (MESHUNITS * TILEUNITS) + i) begin
-                            B_valid[i][j] = 1;
-                            B_shelf_life[i][j] = (MESHUNITS * TILEUNITS) - (prev_load_tick_ctr - i);
-                            B_propagate[i][j] = load_lock == LOCK_ZERO ? 0 : 1;
-                        end
-                        else begin
-                            B_valid[i][j] = 0;
-                            B_shelf_life[i][j] = 0;
-                            B_propagate[i][j] = 0;
-                        end
+                        B_valid[i][j] = 1;
+                        B_shelf_life[i][j] = (MESHUNITS * TILEUNITS) - (load_tick_ctr - i);
                     end
                 end
-            end            
+                else begin
+                    B_col_read_addrs_buffer[i] = 0;
+                    B_read_valid_buffer[i] = 0;
+                    for (j = 0; j < TILEUNITS; j++) begin
+                        B_valid[i][j] = 0;
+                        B_shelf_life[i][j] = 0;
+                    end
+                end
+            end         
         end
         // LOAD COMPLETE on the cycle after last col/last row loaded into sys array
-        // --> l - 1 = MU * TU + i, i = final col (MU - 1)
+        // --> l = MU * TU + i + 1, i = final col (MU - 1)
         // --> l = MU * TU + MU - 1 + 1
         // --> l = MU * (1 + TU)
-        load_complete = load_tick_ctr == MESHUNITS * (1 + TILEUNITS)
+        load_complete = load_tick_ctr == MESHUNITS * (1 + TILEUNITS);
+
+        // 
+        // GLOBAL ARRAY LOGIC (PROPAGATE)
+        //
+        for (i = 0; i < MESHUNITS; i++) begin
+            for (j = 0; j < TILEUNITS; j++) begin
+                if (LOAD_LOCK_ZERO | COMP_LOCK_ONE) begin
+                    B_propagate[i][j] = 0;
+                end
+                else begin
+                    B_propagate[i][j] = 1;
+                end
+            end
+        end
     end
 
+    assign comp_finished = comp_complete;
+    assign load_finished = load_complete;
+    assign A_row_read_addrs = A_row_read_addrs_buffer;
+    assign D_col_read_addrs = D_col_read_addrs_buffer;
+    assign B_col_read_addrs = B_col_read_addrs_buffer;
+    assign A_read_valid = A_read_valid_buffer;
+    assign D_read_valid = D_read_valid_buffer;
+    assign B_read_valid = B_read_valid_buffer;
+    assign C = C_buffer;
+    assign C_col_write_addrs = C_col_write_addrs_buffer;
+    assign C_write_valid = C_write_valid_buffer;
+
     always @(posedge clock) begin
+        integer i;
         if (reset) begin
-            comp_lock <= LOCK_FREE;
-            comp_complete <= 0;
-            load_lock <= LOCK_FREE;
-            load_complete <= 0;
+            for (i = 0; i < 2; i++) begin
+                comp_lock[i] <= 0;
+                load_lock[i] <= 0;
+            end
         end
         else begin
+            //
+            // COMP/LOAD COUNTER LOGIC
+            //
+            if (~COMP_LOCK_FREE)
+                comp_tick_ctr <= comp_tick_ctr + 1;
+            if (~LOAD_LOCK_FREE)
+                load_tick_ctr <= load_tick_ctr + 1;
 
             //
             // SYNCHRONIZATION LOGIC
             //
-
             if (comp_complete) begin
-                comp_complete <= 0;
-                comp_lock <= LOCK_FREE;
+                for (i = 0; i < 2; i++)
+                    comp_lock[i] <= 0;
             end
             if (load_complete) begin
-                load_complete <= 0;
-                load_lock <= LOCK_FREE;
+                for (i = 0; i < 2; i++)
+                    load_lock[i] <= 0;
             end
-            if (comp_lock == LOCK_FREE && load_lock == LOCK_FREE) begin
+            if (COMP_LOCK_FREE && LOAD_LOCK_FREE) begin
                 if (comp_lock_req[0]) begin
                     // assign comp_lock to 0 and try to assign load_lock to 1
-                    comp_lock <= LOCK_ZERO;
+                    comp_lock[0] <= 1;
                     comp_tick_ctr <= 0;
                     A_base_addr <= A_addr[0];
                     D_base_addr <= D_addr[0];
                     C_base_addr <= C_addr[0];
                     if (load_lock_req[1]) begin
-                        load_lock <= LOCK_ONE;
+                        load_lock[1] <= 1;
                         B_base_addr <= B_addr[1];
                     end
                     else begin
-                        load_lock <= LOCK_FREE;
+                        for (i = 0; i < 2; i++)
+                            load_lock[i] <= 0;
                     end
                 end
                 else if (comp_lock_req[1]) begin
                     // assign comp_lock to 1 and try to assign load lock to 0
-                    comp_lock <= LOCK_ONE;
+                    comp_lock[1] <= 1;
                     comp_tick_ctr <= 0;
                     A_base_addr <= A_addr[1];
                     D_base_addr <= D_addr[1];
                     C_base_addr <= C_addr[1];
                     if (load_lock_req[0]) begin
-                        load_lock <= LOCK_ZERO;
+                        load_lock[0] <= 1;
                         B_base_addr <= B_addr[0];
                     end
                     else begin
-                        load_lock <= LOCK_FREE;
+                        for (i = 0; i < 2; i++)
+                            load_lock[i] <= 0;
                     end
                 end
                 else begin
                     // assign load lock to lowest index requester
-                    comp_lock <= LOCK_FREE;
+                    for (i = 0; i < 2; i++)
+                        comp_lock[i] <= 0;
                     if (load_lock_req[0]) begin
-                        load_lock <= LOCK_ZERO;
+                        load_lock[0] <= 1;
                         B_base_addr <= B_addr[0];
                     end
                     else if (load_lock_req[1]) begin
-                        load_lock <= LOCK_ONE;
+                        load_lock[1] <= 1;
                         B_base_addr <= B_addr[1];
                     end
                     else begin
-                        load_lock <= LOCK_FREE;
+                        for (i = 0; i < 2; i++)
+                            load_lock[i] <= 0;
                     end
                 end
             end
-            else if (comp_lock == LOCK_FREE) begin
+            else if (COMP_LOCK_FREE) begin
                 // try to assign comp lock to first thread that doesn't hold load lock
-                if (load_lock != LOCK_ZERO && comp_lock_req[0]) begin
-                    comp_lock <= LOCK_ZERO;
+                if (~load_lock[0] && comp_lock_req[0]) begin
+                    comp_lock[0] <= 1;
                     comp_tick_ctr <= 0;
                     A_base_addr <= A_addr[0];
                     D_base_addr <= D_addr[0];
                     C_base_addr <= C_addr[0];
                 end
-                else if (load_lock != LOCK_ONE && comp_lock_req[1]) begin
-                    comp_lock <= LOCK_ONE;
+                else if (~load_lock[1] && comp_lock_req[1]) begin
+                    comp_lock[1] <= 1;
                     comp_tick_ctr <= 0;
                     A_base_addr <= A_addr[1];
                     D_base_addr <= D_addr[1];
                     C_base_addr <= C_addr[1];
                 end
             end
-            else if (load_lock == LOCK_FREE) begin
+            else if (LOAD_LOCK_FREE) begin
                 // try to assign load lock to first thread that doesn't hold comp lock
-                if (comp_lock != LOCK_ZERO && load_lock_req[0]) begin
-                    load_lock <= LOCK_ZERO;
+                if (~comp_lock[0] && load_lock_req[0]) begin
+                    load_lock[0] <= 1;
                     B_base_addr <= B_addr[0];
                 end
-                else if (comp_lock != LOCK_ONE && load_lock_req[1]) begin
-                    load_lock <= LOCK_ONE;
+                else if (~comp_lock[1] && load_lock_req[1]) begin
+                    load_lock[1] <= 1;
                     B_base_addr <= B_addr[1];
                 end
             end
@@ -306,21 +363,21 @@ module sys_array_controller
     // INTERNAL SYS ARRAY MODULE
     //
     
-    sys_array #(parameter MESHROWS=MESHUNITS, MESHCOLS=MESHUNITS, BITWIDTH=BITWIDTH, TILEROWS=TILEUNITS, TILECOLS=TILEUNITS)
+    sys_array #(MESHUNITS, MESHUNITS, BITWIDTH, TILEUNITS, TILEUNITS)
     sys_array_module (
         .clock(clock),
         .reset(reset),
         .in_dataflow(1),
         .in_a(A),
-        .in_a_valid(A_valid),
+        .in_a_valid(array_A_valid),
         .in_b(B),
         .in_d(D),
         .in_propagate(B_propagate),
         .in_b_shelf_life(B_shelf_life),
         .in_b_valid(B_valid),
-        .in_d_valid(D_valid),
-        .out_c(C_buffer),
-        .out_c_valid(C_valid_buffer)
+        .in_d_valid(array_D_valid),
+        .out_c(array_C),
+        .out_c_valid(array_C_valid)
     );
 
 endmodule

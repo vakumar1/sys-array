@@ -3,6 +3,14 @@ VINC = /usr/share/verilator/include
 SRC_DIR = software/src/
 TEST_DIR = software/test/
 
+# sys array controller tests
+ARR_CTRL_TST_NAME = sys_array_controller
+ARR_CTRL_HARDWARE_FILES = hardware/sys_array_controller.v hardware/sys_array.v
+ARR_CTRL_SRC_FILES = 
+ARR_CTRL_TEST_FILES = software/test/sysarray_ctrl_test.cpp
+ARR_CTRL_SIM_FILE = $(ARR_CTRL_TST_NAME)_simulation
+ADDRWIDTH = 32
+
 # sys array tests
 ARRAY_TST_NAME = sys_array
 ARRAY_HARDWARE_FILES = hardware/sys_array.v
@@ -43,6 +51,8 @@ fifo: veri-fifo sim-fifo
 
 sys_array: veri-array sim-array
 
+sys_array_ctrl: veri-arrayctrl sim-arrayctrl
+
 # BUILD VERILATOR
 veri-uart:
 	verilator -Wno-style \
@@ -63,6 +73,13 @@ veri-array:
 	cd $(BUILD_DIR); \
 	make -f V$(ARRAY_TST_NAME).mk;
 
+veri-arrayctrl:
+	verilator -Wno-style \
+	-GMESHUNITS=$(MESHROWS) -GTILEUNITS=$(TILEROWS) -GBITWIDTH=$(BITWIDTH) \
+	--trace --trace-max-width 1024 $(VINC)/verilated_fst_c.cpp -cc $(ARR_CTRL_HARDWARE_FILES)
+	cd $(BUILD_DIR); \
+	make -f V$(ARR_CTRL_TST_NAME).mk;
+
 # BUILD SIMULATION
 sim-array:
 	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
@@ -82,6 +99,13 @@ sim-fifo:
 	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
 	$(FIFO_SRC_FILES) $(FIFO_TEST_FILES) $(BUILD_DIR)/V$(FIFO_TST_NAME)__ALL.a \
 	-o $(FIFO_SIM_FILE)
+
+sim-arrayctrl:
+	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
+	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
+	$(ARR_CTRL_SRC_FILES) $(ARR_CTRL_TEST_FILES) $(BUILD_DIR)/V$(ARR_CTRL_TST_NAME)__ALL.a \
+	-DBITWIDTH=$(BITWIDTH) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
+	-o $(ARR_CTRL_SIM_FILE)
 
 # RUN TESTS
 test-array:
@@ -106,4 +130,5 @@ clean:
 	- rm $(ARRAY_SIM_FILE)
 	- rm $(UART_SIM_FILE)
 	- rm $(FIFO_SIM_FILE)
+	- rm $(ARR_CTRL_SIM_FILE)
 	- rm *.vcd

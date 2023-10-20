@@ -9,7 +9,7 @@ module sys_array
         input signed [BITWIDTH-1:0] in_b[MESHCOLS-1:0][TILECOLS-1:0],
         input signed [BITWIDTH-1:0] in_d[MESHCOLS-1:0][TILECOLS-1:0],
         input in_propagate[MESHCOLS-1:0][TILECOLS-1:0],
-        input [$clog2(MESHROWS * TILEROWS):0] in_b_shelf_life[MESHCOLS-1:0][TILECOLS-1:0],
+        input [BITWIDTH-1:0] in_b_shelf_life[MESHCOLS-1:0][TILECOLS-1:0],
         input in_b_valid[MESHCOLS-1:0][TILECOLS-1:0],
         input in_d_valid[MESHCOLS-1:0][TILECOLS-1:0],
         output signed [BITWIDTH-1:0] out_c[MESHCOLS-1:0][TILECOLS-1:0],
@@ -22,7 +22,7 @@ module sys_array
     reg signed [BITWIDTH-1:0] inter_b[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
     reg signed [BITWIDTH-1:0] inter_d[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
     reg signed inter_propagate[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
-    reg [$clog2(MESHROWS * TILEROWS):0] inter_b_shelf_life[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /* verilator split_var*/;
+    reg [BITWIDTH-1:0] inter_b_shelf_life[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /* verilator split_var*/;
     reg inter_b_valid[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
     reg inter_d_valid[MESHROWS:0][MESHCOLS-1:0][TILECOLS-1:0] /*verilator split_var*/;
 
@@ -95,7 +95,7 @@ module Tile
         input signed [BITWIDTH-1:0] in_b[TILECOLS-1:0],
         input signed [BITWIDTH-1:0] in_d[TILECOLS-1:0],
         input in_propagate[TILECOLS-1:0],
-        input [$clog2(MESHROWS * TILEROWS):0] in_b_shelf_life[TILECOLS-1:0],
+        input [BITWIDTH-1:0] in_b_shelf_life[TILECOLS-1:0],
         input in_b_valid[TILECOLS-1:0],
         input in_d_valid[TILECOLS-1:0],
         output reg signed [BITWIDTH-1:0] out_a[TILECOLS-1:0],
@@ -103,7 +103,7 @@ module Tile
         output reg signed [BITWIDTH-1:0] out_b[TILECOLS-1:0],
         output reg signed [BITWIDTH-1:0] out_d[TILECOLS-1:0],
         output reg out_propagate[TILECOLS-1:0],
-        output reg [$clog2(MESHROWS * TILEROWS):0] out_b_shelf_life[TILECOLS-1:0],
+        output reg [BITWIDTH-1:0] out_b_shelf_life[TILECOLS-1:0],
         output reg out_b_valid[TILECOLS-1:0],
         output reg out_d_valid[TILECOLS-1:0]
     );
@@ -114,7 +114,7 @@ module Tile
     wire signed [BITWIDTH-1:0] inter_b[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire signed [BITWIDTH-1:0] inter_d[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire signed inter_propagate[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
-    wire [$clog2(MESHROWS * TILEROWS):0] inter_b_shelf_life[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
+    wire [BITWIDTH-1:0] inter_b_shelf_life[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire inter_b_valid[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
     wire inter_d_valid[TILEROWS:0][TILECOLS-1:0] /*verilator split_var*/;
 
@@ -196,7 +196,7 @@ module PE
         input signed [BITWIDTH-1:0] in_b,
         input signed [BITWIDTH-1:0] in_d,
         input in_propagate,
-        input [$clog2(MESHROWS * TILEROWS):0] in_b_shelf_life,
+        input [BITWIDTH-1:0] in_b_shelf_life,
         input in_b_valid,
         input in_d_valid,
         output signed [BITWIDTH-1:0] out_a,
@@ -204,7 +204,7 @@ module PE
         output signed [BITWIDTH-1:0] out_b,
         output signed [BITWIDTH-1:0] out_d,
         output out_propagate,
-        output [$clog2(MESHROWS * TILEROWS):0] out_b_shelf_life,
+        output [BITWIDTH-1:0] out_b_shelf_life,
         output out_b_valid,
         output out_d_valid
     );
@@ -214,8 +214,8 @@ module PE
     reg signed [BITWIDTH-1:0] b1;
     reg valid0;
     reg valid1;
-    reg [$clog2(MESHROWS * TILEROWS):0] shelf_life0;
-    reg [$clog2(MESHROWS * TILEROWS):0] shelf_life1;
+    reg [BITWIDTH-1:0] shelf_life0;
+    reg [BITWIDTH-1:0] shelf_life1;
 
     always @(posedge clock) begin
         if (reset) begin
