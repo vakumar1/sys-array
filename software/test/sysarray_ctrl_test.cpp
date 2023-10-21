@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
     std::vector<std::vector<int>> B(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
     for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
         for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
-            B[i][j] = i == j ? 1 : 0;
+            B[i][j] = rand() % MAX_INP;
         }
     }
     res = complete_load(tickcount, tb, tfp, 0, B);
@@ -246,11 +246,15 @@ int main(int argc, char** argv) {
 
     std::vector<std::vector<int>> A(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
     std::vector<std::vector<int>> D(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
-    std::vector<std::vector<int>> expected_C (MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
     for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
         for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
             A[i][j] = rand() % MAX_INP;
             D[i][j] = rand() % MAX_INP;
+        }
+    }
+    std::vector<std::vector<int>> expected_C (MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
+        for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
             expected_C[i][j] = D[i][j];
             for (int k = 0; k < MESHUNITS * TILEUNITS; k++) {
                 expected_C[i][j] += A[i][k] * B[k][j];
