@@ -60,7 +60,7 @@ void init(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp) {
 
 // LOAD FUNCTIONS
 
-int double_load_req(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp) {
+int double_load_req_conflict(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp) {
     tb->load_lock_req[0] = 1;
     tb->load_lock_req[1] = 1;
     tb->comp_lock_req[0] = 0;
@@ -71,6 +71,26 @@ int double_load_req(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tf
     tb->load_lock_req[0] = 0;
     tb->load_lock_req[1] = 0;
     if (!tb->load_lock_res[0] || tb->load_lock_res[1] || tb->comp_lock_res[0] || tb->comp_lock_res[1]) {
+        return SIM_ERROR;
+    }
+    return SUCCESS;
+}
+
+int single_load_req(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp, int index) {
+    int load_idx = index;
+    int idle_idx = 1 - index;
+    int load_addr = index == 0 ? b0_addr : b1_addr;
+    int idle_addr = index == 0 ? b1_addr : b0_addr;
+    tb->load_lock_req[load_idx] = 1;
+    tb->load_lock_req[idle_idx] = 0;
+    tb->comp_lock_req[load_idx] = 0;
+    tb->comp_lock_req[idle_idx] = 0;
+    tb->B_addr[load_idx] = load_addr;
+    tb->B_addr[idle_idx] = idle_addr;
+    tick(tickcount, tb, tfp);
+    tb->load_lock_req[load_idx] = 0;
+    tb->load_lock_req[idle_idx] = 0;
+    if (!tb->load_lock_res[load_idx] || tb->load_lock_res[idle_idx] || tb->comp_lock_res[load_idx] || tb->comp_lock_res[idle_idx]) {
         return SIM_ERROR;
     }
     return SUCCESS;
@@ -91,8 +111,8 @@ int complete_load(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
             if (mesh_addr < addr || mesh_addr >= addr + MATSIZE) {
                 return SIM_ERROR;
             }
-            int row = mesh_addr / (MESHUNITS * TILEUNITS);
-            int col = mesh_addr % (MESHUNITS * TILEUNITS);
+            int row = (mesh_addr - addr) / (MESHUNITS * TILEUNITS);
+            int col = (mesh_addr - addr) % (MESHUNITS * TILEUNITS);
             for (int j = 0; j < TILEUNITS; j++) {
                 tb->B[i][j] = B[row][col + j];
             }
@@ -120,7 +140,7 @@ int complete_load(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
 
 // COMP FUNCTIONS
 
-int double_comp_req(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp) {
+int double_comp_req_conflict(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp) {
     tb->load_lock_req[0] = 0;
     tb->load_lock_req[1] = 0;
     tb->comp_lock_req[0] = 1;
@@ -137,7 +157,26 @@ int double_comp_req(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tf
     return SUCCESS;
 }
 
-int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp, 
+int single_comp_req(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp, int index) {
+    int comp_idx = index;
+    int idle_idx = 1 - index;
+    tb->load_lock_req[comp_idx] = 0;
+    tb->load_lock_req[idle_idx] = 0;
+    tb->comp_lock_req[comp_idx] = 1;
+    tb->comp_lock_req[idle_idx] = 0;
+    tb->A_addr[comp_idx] = a_addr;
+    tb->D_addr[comp_idx] = d_addr;
+    tb->C_addr[comp_idx] = c_addr;
+    tick(tickcount, tb, tfp);
+    tb->comp_lock_req[comp_idx] = 0;
+    tb->comp_lock_req[1] = 0;
+    if (tb->load_lock_res[comp_idx] || tb->load_lock_res[idle_idx] || !tb->comp_lock_res[comp_idx] || tb->comp_lock_res[idle_idx]) {
+        return SIM_ERROR;
+    }
+    return SUCCESS;
+}
+
+int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp, int index,
                     std::vector<std::vector<int>>& A, std::vector<std::vector<int>>& D,
                     std::vector<std::vector<int>>& C, std::vector<std::vector<int>>& expected_C) {
     int a;
@@ -200,6 +239,11 @@ int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
             }
         }
     }
+
+    tick(tickcount, tb, tfp);
+    if (tb->comp_lock_res[index]) {
+        return SIM_ERROR;
+    }
     return SUCCESS;
 }
 
@@ -215,59 +259,111 @@ int main(int argc, char** argv) {
     tb->trace(tfp, 99);
     tfp->open("sys_array_ctrl.vcd");
 
+    // SETUP MOCK MEMORY
+    std::vector<std::vector<int>> B0(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    std::vector<std::vector<int>> B1(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    std::vector<std::vector<int>> A(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    std::vector<std::vector<int>> D(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
+        for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
+            B0[i][j] = rand() % MAX_INP;
+            B1[i][j] = rand() % MAX_INP;
+            A[i][j] = rand() % MAX_INP;
+            D[i][j] = rand() % MAX_INP;
+        }
+    }
+    std::vector<std::vector<int>> C(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    std::vector<std::vector<int>> expected_C0 (MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    std::vector<std::vector<int>> expected_C1 (MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
+    for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
+        for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
+            expected_C0[i][j] = D[i][j];
+            expected_C1[i][j] = D[i][j];
+            for (int k = 0; k < MESHUNITS * TILEUNITS; k++) {
+                expected_C0[i][j] += A[i][k] * B0[k][j];
+                expected_C1[i][j] += A[i][k] * B1[k][j];
+            }
+        }
+    }
+
+    // TEST 1: single-threaded load + comp
     int res;
     init(tickcount, tb, tfp);
-    res = double_load_req(tickcount, tb, tfp);
+    res = double_load_req_conflict(tickcount, tb, tfp);
     if (res != SUCCESS) {
         printf("Double load request failed: %d\n", res);
         tfp->close();
         return 0;
     }
-
-    std::vector<std::vector<int>> B(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
-    for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
-        for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
-            B[i][j] = rand() % MAX_INP;
-        }
-    }
-    res = complete_load(tickcount, tb, tfp, 0, B);
+    res = complete_load(tickcount, tb, tfp, 0, B0);
     if (res != SUCCESS) {
         printf("Load complete failed: %d\n", res);
         tfp->close();
         return 0;
     }
-
-    res = double_comp_req(tickcount, tb, tfp);
+    res = double_comp_req_conflict(tickcount, tb, tfp);
     if (res != SUCCESS) {
         printf("Double comp request failed: %d\n", res);
         tfp->close();
         return 0;
     }
-
-    std::vector<std::vector<int>> A(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
-    std::vector<std::vector<int>> D(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
-    for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
-        for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
-            A[i][j] = rand() % MAX_INP;
-            D[i][j] = rand() % MAX_INP;
-        }
-    }
-    std::vector<std::vector<int>> expected_C (MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
-    for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
-        for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
-            expected_C[i][j] = D[i][j];
-            for (int k = 0; k < MESHUNITS * TILEUNITS; k++) {
-                expected_C[i][j] += A[i][k] * B[k][j];
-            }
-        }
-    }
-    std::vector<std::vector<int>> C(MESHUNITS * TILEUNITS, std::vector<int>(MESHUNITS * TILEUNITS));
-    res = complete_comp(tickcount, tb, tfp, A, D, C, expected_C);
+    res = complete_comp(tickcount, tb, tfp, 0, A, D, C, expected_C0);
     if (res != SUCCESS) {
         printf("Comp complete failed\n");
         tfp->close();
         return 0;
     }
+
+    // TEST 2: double-threaded load, then single-threaded comps
+    res = single_load_req(tickcount, tb, tfp, 0);
+    if (res != SUCCESS) {
+        printf("Single load request B0 failed: %d\n", res);
+        tfp->close();
+        return 0;
+    }
+    res = complete_load(tickcount, tb, tfp, 0, B0);
+    if (res != SUCCESS) {
+        printf("Load complete B0 failed: %d\n", res);
+        tfp->close();
+        return 0;
+    }
+    res = single_load_req(tickcount, tb, tfp, 1);
+    if (res != SUCCESS) {
+        printf("Single load request B1 failed: %d\n", res);
+        tfp->close();
+        return 0;
+    }
+    res = complete_load(tickcount, tb, tfp, 1, B1);
+    if (res != SUCCESS) {
+        printf("Load complete B1 failed: %d\n", res);
+        tfp->close();
+        return 0;
+    }
+    res = single_comp_req(tickcount, tb, tfp, 0);
+    if (res != SUCCESS) {
+        printf("Comp req on B0 failed: %d\n", res);
+        tfp->close();
+        return 0;
+    }
+    res = complete_comp(tickcount, tb, tfp, 0, A, D, C, expected_C0);
+    if (res != SUCCESS) {
+        printf("Comp complete on B0 failed\n");
+        tfp->close();
+        return 0;
+    }
+    tick(tickcount, tb, tfp);
+    res = single_comp_req(tickcount, tb, tfp, 1);
+    if (res != SUCCESS) {
+        printf("Comp req on B1 failed: %d\n", res);
+        tfp->close();
+        return 0;
+    }
+    res = complete_comp(tickcount, tb, tfp, 0, A, D, C, expected_C1);
+    if (res != SUCCESS) {
+        printf("Comp complete on B1 failed\n");
+        tfp->close();
+        return 0;
+    }    
 
 
     printf("Controller test fully passed\n");

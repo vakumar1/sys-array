@@ -257,7 +257,7 @@ module sys_array_controller
         end
         else begin
             //
-            // COMP/LOAD COUNTER LOGIC
+            // BASELINE COMP/LOAD COUNTER LOGIC
             //
             if (~COMP_LOCK_FREE)
                 comp_tick_ctr <= comp_tick_ctr + 1;
@@ -285,6 +285,7 @@ module sys_array_controller
                     C_base_addr <= C_addr[0];
                     if (load_lock_req[1]) begin
                         load_lock[1] <= 1;
+                        load_tick_ctr <= 0;
                         B_base_addr <= B_addr[1];
                     end
                     else begin
@@ -301,6 +302,7 @@ module sys_array_controller
                     C_base_addr <= C_addr[1];
                     if (load_lock_req[0]) begin
                         load_lock[0] <= 1;
+                        load_tick_ctr <= 0;
                         B_base_addr <= B_addr[0];
                     end
                     else begin
@@ -314,10 +316,12 @@ module sys_array_controller
                         comp_lock[i] <= 0;
                     if (load_lock_req[0]) begin
                         load_lock[0] <= 1;
+                        load_tick_ctr <= 0;
                         B_base_addr <= B_addr[0];
                     end
                     else if (load_lock_req[1]) begin
                         load_lock[1] <= 1;
+                        load_tick_ctr <= 0;
                         B_base_addr <= B_addr[1];
                     end
                     else begin
