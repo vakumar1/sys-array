@@ -3,6 +3,9 @@ module blockmem
         parameter ADDRSIZE, BITWIDTH, MESHUNITS, TILEUNITS
     )
     (
+        input clock,
+        input reset,
+
         // MEMORY READ SIGNALS
         input [BITWIDTH-1:0] A_tile_read_addrs [MESHUNITS-1:0],
         input [BITWIDTH-1:0] D_tile_read_addrs [MESHUNITS-1:0],
@@ -52,10 +55,18 @@ module blockmem
     assign B = B_buffer;
 
     always @(posedge clock) begin
-        integer i;
-        for (i = 0; i < MESHUNITS; i++) begin
-            if (C_write_valid[i]) begin
-                block_mem[C_tile_addr[i] + TILEUNITS - 1:C_tile_addr[i]] <= C[i][TILEUNITS-1:0];
+        if (reset) begin
+            integer i;
+            for (i = 0; i < ADDRSIZE; i++) begin
+                block_mem[i] <= 0;
+            end
+        end
+        else begin
+            integer i;
+            for (i = 0; i < MESHUNITS; i++) begin
+                if (C_write_valid[i]) begin
+                    block_mem[C_tile_addr[i] + TILEUNITS - 1:C_tile_addr[i]] <= C[i][TILEUNITS-1:0];
+                end
             end
         end
     end
