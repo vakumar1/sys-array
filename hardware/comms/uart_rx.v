@@ -66,6 +66,6 @@ module uart_receiver
         end
     end
     assign data_out = buffer;
-    assign data_out_valid = state == FINISH;
+    assign data_out_valid = state == FINISH && tick_ctr == 0;
     assign rts = (state == WAITING) && uart_ready;
 endmodule

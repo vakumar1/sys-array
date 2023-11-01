@@ -12,6 +12,7 @@ module uart_controller
         output write_lock_res [1:0],
 
         // WRITE SIGNALS (sync)
+        output write_ready,
         input [7:0] data_in [1:0],
         input data_in_valid [1:0],
 
@@ -22,7 +23,7 @@ module uart_controller
 
         // SERIAL LINES
         input serial_in,
-        input serial_out,
+        output serial_out
 
     );
 
@@ -33,7 +34,7 @@ module uart_controller
     reg write_lock [1:0];
 
     // UART STATE
-    wire uart_data_in = WRITE_LOCK_FREE
+    wire [7:0] uart_data_in = WRITE_LOCK_FREE
                             ? 0
                             : WRITE_LOCK_ZERO
                                 ? data_in[0]
@@ -105,6 +106,7 @@ module uart_controller
         .reset(reset),
 
         // write data directly to UART (if lock acq. and valid)
+        .tx_ready(write_ready),
         .data_in(uart_data_in),
         .data_in_valid(uart_data_in_valid),
 
@@ -115,7 +117,7 @@ module uart_controller
         .serial_out(serial_out),
         .local_ready(~fifo_full),
         .cts(1), // TODO: use control signals from driver
-        .rts(), // TODO: use control signals from driver
+        .rts() // TODO: use control signals from driver
     );
 
     fifo #(BUFFER_SIZE)
@@ -132,7 +134,7 @@ module uart_controller
         .data_out(data_out),
         .data_out_valid(data_out_valid),
         .empty(fifo_empty),
-        .full(fifo_full),
-    )
+        .full(fifo_full)
+    );
 
 endmodule

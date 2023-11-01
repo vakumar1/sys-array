@@ -24,6 +24,14 @@ MESHCOLS = 4
 TILEROWS = 4
 TILECOLS = 4
 
+# uart controller tests
+UART_CTRL_TST_NAME = uart_controller
+UART_CTRL_HARDWARE_FILES = hardware/comms/uart_controller.v hardware/comms/uart.v hardware/comms/uart_tx.v hardware/comms/uart_rx.v hardware/comms/fifo.v
+UART_CTRL_SRC_FILES = 
+UART_CTRL_TEST_FILES = software/test/uart_ctrl_test.cpp
+UART_CTRL_SIM_FILE = uart_controller_simulation
+
+
 # uart tests
 UART_TST_NAME = uart
 UART_HARDWARE_FILES = hardware/comms/uart.v hardware/comms/uart_tx.v hardware/comms/uart_rx.v
@@ -47,11 +55,13 @@ sim: sim-array sim-uart
 
 uart: veri-uart sim-uart
 
+uartctrl: veri-uartctrl sim-uartctrl
+
 fifo: veri-fifo sim-fifo
 
-sys_array: veri-array sim-array
+array: veri-array sim-array
 
-sys_array_ctrl: veri-arrayctrl sim-arrayctrl
+arrayctrl: veri-arrayctrl sim-arrayctrl
 
 # BUILD VERILATOR
 veri-uart:
@@ -59,6 +69,12 @@ veri-uart:
 	--trace -cc $(UART_HARDWARE_FILES)
 	cd $(BUILD_DIR); \
 	make -f V$(UART_TST_NAME).mk;
+
+veri-uartctrl:
+	verilator -Wno-style \
+	--trace --trace-depth 25 -cc $(UART_CTRL_HARDWARE_FILES)
+	cd $(BUILD_DIR); \
+	make -f V$(UART_CTRL_TST_NAME).mk;
 
 veri-fifo:
 	verilator -Wno-style \
@@ -94,6 +110,12 @@ sim-uart:
 	$(UART_SRC_FILES) $(UART_TEST_FILES) $(BUILD_DIR)/V$(UART_TST_NAME)__ALL.a \
 	-o $(UART_SIM_FILE)
 
+sim-uartctrl:
+	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
+	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
+	$(UART_CTRL_SRC_FILES) $(UART_CTRL_TEST_FILES) $(BUILD_DIR)/V$(UART_CTRL_TST_NAME)__ALL.a \
+	-o $(UART_CTRL_SIM_FILE)
+
 sim-fifo:
 	g++ -g -I$(VINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
 	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
@@ -121,6 +143,9 @@ test-array:
 
 test-uart:
 	./$(UART_SIM_FILE)
+
+test-uartctrl:
+	./$(UART_CTRL_SIM_FILE)
 
 test-fifo:
 	./$(FIFO_SIM_FILE)

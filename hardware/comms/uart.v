@@ -5,6 +5,7 @@ module uart
         input reset,
 
         // TX inputs
+        output tx_ready,
         input [7:0] data_in,
         input data_in_valid,
 
@@ -27,6 +28,7 @@ module uart
     // share tx_running between transmitter/receiver
     // to stop receiver when transmitter is running
     wire tx_running;
+    assign tx_ready = ~tx_running;
 
     uart_transmitter #(SYMBOL_EDGE_TIME)
     uart_tx (

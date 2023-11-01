@@ -95,7 +95,7 @@ int send_byte(Vuart* sender, Vuart* receiver, VerilatedVcdC* sender_tfp, Verilat
     char result = 0x0;
     bool found = false;
     for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
-        if (!receiver->data_out_valid) {
+        if ((i == 0 && !receiver->data_out_valid) || (i != 0 && receiver->data_out_valid)) {
             return SIM_ERROR;
         }
         result = receiver->data_out;
