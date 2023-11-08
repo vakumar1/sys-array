@@ -13,11 +13,11 @@ module core
 
     // loader state
     parameter
-        LOADER_START,
-        LOADER_IMEM_ADDR,
-        LOADER_IMEM_DATA,
-        LOADER_BMEM_ADDR,
-        LOADER_BMEM_DATA;
+        LOADER_START = 3'd0,
+        LOADER_IMEM_ADDR = 3'd1,
+        LOADER_IMEM_DATA = 3'd2,
+        LOADER_BMEM_ADDR = 3'd3,
+        LOADER_BMEM_DATA = 3'd4;
 
     // control signal values
     parameter
@@ -45,10 +45,13 @@ module core
         if (reset) begin
             // -> LOADER START
             loader_state <= LOADER_START;
+            thread0_running <= 0;
+            thread1_running <= 1;
+            thread2_running <= 2;
         end
         else begin
             if (read_data_valid) begin
-                case (state)
+                case (loader_state)
                     LOADER_START: begin
                         case (read_data[7:6])
                             INVALID: begin
@@ -77,19 +80,19 @@ module core
                         endcase
                     end
                     LOADER_IMEM_ADDR: begin
-                        loader_addr_buffer[8 * (load_byte_ctr + 1) - 1:8 * load_byte_ctr] <= read_data;
-                        if (load_byte_ctr == (BITWIDTH >> 2) - 1) begin
+                        loader_addr_buffer[8 * (loader_byte_ctr + 1) - 1:8 * loader_byte_ctr] <= read_data;
+                        if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
                             // -> IMEM DATA
-                            load_state <= LOADER_IMEM_DATA;
-                            load_byte_ctr <= 0;
+                            loader_state <= LOADER_IMEM_DATA;
+                            loader_byte_ctr <= 0;
                         end
                         else begin
-                            load_byte_ctr <= load_byte_ctr + 1;
+                            loader_byte_ctr <= loader_byte_ctr + 1;
                         end
                     end
                     LOADER_IMEM_DATA: begin
-                        loader_imem_data_buffer[8 * (load_byte_ctr + 1) - 1:8 * load_byte_ctr] <= read_data;
-                        if (load_byte_ctr == (BITWIDTH >> 2) - 1) begin
+                        loader_imem_data_buffer[8 * (loader_byte_ctr + 1) - 1:8 * loader_byte_ctr] <= read_data;
+                        if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
                             // write imem data
                             if (~thread0_running) begin
                                 write_valid_imem0 <= 1;
@@ -102,34 +105,34 @@ module core
                             end
 
                             // -> START
-                            load_state <= LOADER_START;
+                            loader_state <= LOADER_START;
                         end
                         else begin
-                            load_byte_ctr <= load_byte_ctr + 1;
+                            loader_byte_ctr <= loader_byte_ctr + 1;
                         end
                     end
                     LOADER_BMEM_ADDR: begin
-                        loader_addr_buffer[8 * (load_byte_ctr + 1) - 1:8 * load_byte_ctr] <= read_data;
-                        if (load_byte_ctr == (BITWIDTH >> 2) - 1) begin
+                        loader_addr_buffer[8 * (loader_byte_ctr + 1) - 1:8 * loader_byte_ctr] <= read_data;
+                        if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
                             // -> BMEM DATA
-                            load_state <= LOADER_BMEM_DATA;
-                            load_byte_ctr <= 0;
+                            loader_state <= LOADER_BMEM_DATA;
+                            loader_byte_ctr <= 0;
                         end
                         else begin
-                            load_byte_ctr <= load_byte_ctr + 1;
+                            loader_byte_ctr <= loader_byte_ctr + 1;
                         end
                     end
                     LOADER_BMEM_DATA: begin
-                        loader_bmem_data_buffer[] <= read_data
-                        if (load_byte_ctr == (BITWIDTH >> 2) * (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1) begin
+                        loader_bmem_data_buffer[(loader_byte_ctr >> 2)][8 * ((loader_byte_ctr & 0'b11) + 1) - 1:8 * (loader_byte_ctr & 0'b11)] <= read_data;
+                        if (loader_byte_ctr == (BITWIDTH >> 2) * (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1) begin
                             // write bmem data
                             write_valid_bmem <= 1;
 
                             // -> START
-                            load_state <= LOADER_START;
+                            loader_state <= LOADER_START;
                         end
                         else begin
-                            load_byte_ctr <= load_byte_ctr + 1;
+                            loader_byte_ctr <= loader_byte_ctr + 1;
                         end
                     end
                 endcase
@@ -138,16 +141,96 @@ module core
     end
 
     // SYS ARRAY
-    sys_array_controller #()
-    _sys_array_controller ();
+    // COMP LOGIC SIGNALS <-> THREADS
+    reg comp_lock_req [1:0];
+    reg comp_lock_res [1:0];
+    reg comp_finished;
+    reg [BITWIDTH-1:0] A_addr [1:0];
+    reg [BITWIDTH-1:0] D_addr [1:0];
+    reg [BITWIDTH-1:0] C_addr [1:0];
+
+    // LOAD LOGIC SIGNALS <-> THREADS
+    reg load_lock_req [1:0];
+    reg load_lock_res [1:0];
+    reg load_finished;
+    reg [BITWIDTH-1:0] B_addr [1:0];
+
+    // ARRAY READ SIGNALS <-> BMEM
+    wire [BITWIDTH-1:0] A [MESHUNITS-1:0][TILEUNITS-1:0];
+    wire [BITWIDTH-1:0] D [MESHUNITS-1:0][TILEUNITS-1:0];
+    wire [BITWIDTH-1:0] B [MESHUNITS-1:0][TILEUNITS-1:0];
+    wire [BITWIDTH-1:0] A_row_read_addrs [MESHUNITS-1:0];
+    wire [BITWIDTH-1:0] D_col_read_addrs [MESHUNITS-1:0];
+    wire [BITWIDTH-1:0] B_col_read_addrs [MESHUNITS-1:0];
+    wire A_read_valid [MESHUNITS-1:0];
+    wire D_read_valid [MESHUNITS-1:0];
+    wire B_read_valid [MESHUNITS-1:0];
+
+    // ARRAY WRITE SINGALS <-> BMEM
+    wire [BITWIDTH-1:0] C [MESHUNITS-1:0][TILEUNITS-1:0];
+    wire [BITWIDTH-1:0] C_col_write_addrs [MESHUNITS-1:0];
+    wire C_write_valid [MESHUNITS-1:0];
+
+    sys_array_controller #(BITWIDTH, MESHUNITS, TILEUNITS)
+    _sys_array_controller (
+        .clock(clock),
+        .reset(reset),
+
+        // COMP LOGIC
+        .comp_lock_req(comp_lock_req),
+        .A_addr(A_addr),
+        .D_addr(D_addr),
+        .C_addr(C_addr),
+        .comp_lock_res(comp_lock_res),
+        .comp_finished(comp_finished),
+
+        // LOAD LOGIC
+        .load_lock_req(load_lock_req),
+        .B_addr(B_addr),
+        .load_lock_res(load_lock_res),
+        .load_finished(load_finished),
+
+        // MEMORY READ SIGNALS
+        .A(A),
+        .D(D),
+        .B(B),
+        .A_row_read_addrs(A_row_read_addrs),
+        .D_col_read_addrs(D_col_read_addrs),
+        .B_col_read_addrs(B_col_read_addrs),
+        .A_read_valid(A_read_valid),
+        .D_read_valid(D_read_valid),
+        .B_read_valid(B_read_valid),
+
+        // MEMORY WRITE SIGNALS
+        .C(C),
+        .C_col_write_addrs(C_col_write_addrs),
+        .C_write_valid(C_write_valid)
+    );
 
     // MEMORY + UART
     reg write_valid_bmem;
-    block_mem #(BMEM_ADDRSIZE, BITWIDTH, MESHUNITS, TILEUNITS)
-    _block_mem (
+    blockmem #(BMEM_ADDRSIZE, BITWIDTH, MESHUNITS, TILEUNITS)
+    _blockmem (
         .clock(clock),
         .reset(reset),
-        // TODO: add remaining signals
+
+        // ARRAY -> BMEM READ
+        .A_tile_read_addrs(A_row_read_addrs),
+        .D_tile_read_addrs(D_col_read_addrs),
+        .B_tile_read_addrs(B_col_read_addrs),
+        .A_read_valid(A_read_valid),
+        .D_read_valid(D_read_valid),
+        .B_read_valid(B_read_valid),
+        .A(A),
+        .D(D),
+        .B(B),
+
+        // ARRAY -> BMEM WRITE
+        .C_tile_write_addrs(C_col_write_addrs),
+        .C_write_valid(C_write_valid),
+        .C(C),
+
+        // LOADER -> BMEM WRITE
         .loader_write_addr(loader_addr_buffer),
         .loader_write_valid(write_valid_bmem),
         .loader_write_data(loader_bmem_data_buffer)
@@ -195,23 +278,25 @@ module core
         .write_valid(write_valid_imem2)
     );
 
-    // TODO: UART: sync signals
-
-    // TODO: UART: write signals
+    // UART: write sync + signals
+    reg write_lock_req [1:0];
+    reg write_lock_res [1:0];
+    reg [7:0] write_data [1:0];
+    reg write_data_valid [1:0];
+    reg write_ready;
 
     // UART: read signals
-    reg try_read;
     reg [7:0] read_data;
     reg read_data_valid;
     uart_controller #(BAUD_RATE, CLOCK_FREQ, BUFFER_SIZE)
     _uart_controller (
         .clock(clock),
         .reset(reset),
-        .write_lock_req(),
-        .write_lock_res(),
-        .write_ready(),
-        .data_in(),
-        .data_in_valid(),
+        .write_lock_req(write_lock_req),
+        .write_lock_res(write_lock_res),
+        .write_ready(write_ready),
+        .data_in(write_data),
+        .data_in_valid(write_data_valid),
         .read_valid(1),
         .data_out(read_data),
         .data_out_valid(read_data_valid),

@@ -20,7 +20,7 @@ module imem
 
     reg signed [BITWIDTH-1:0] instr_mem [ADDRSIZE-1:0];
 
-    assign instr_addr_mask = {(BITWIDTH - $clog2(BITWIDTH >> 3)){1'b1}, $clog2(BITWIDTH >> 3){1'b0}};
+    wire instr_addr_mask = {BITWIDTH{1'b1}} ^ {2{1'b1}};
     wire instr_addr1 = read_addr1 & instr_addr_mask;
     wire instr_addr2 = read_addr2 & instr_addr_mask;
     wire write_instr_addr = write_addr & instr_addr_mask;
