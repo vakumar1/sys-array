@@ -30,40 +30,28 @@ module blockmem
     );
 
     // MEMORY
-    reg signed [BITWIDTH-1:0] block_mem [ADDRSIZE-1:0];
+    reg signed [BITWIDTH-1:0] block_mem [ADDRSIZE-1:0] /*verilator public*/;
 
-    // ADDRESSES
+    // STATE + PARAMS
     // array
-    wire tile_addr_mask = {BITWIDTH{1'b1}} ^ {$clog2(TILEUNITS){1'b1}};
-    reg [BITWIDTH-1:0] A_tile_addr [MESHUNITS-1:0];
-    reg [BITWIDTH-1:0] D_tile_addr [MESHUNITS-1:0];
-    reg [BITWIDTH-1:0] B_tile_addr [MESHUNITS-1:0];
-    reg [BITWIDTH-1:0] C_tile_addr [MESHUNITS-1:0];
     reg signed [BITWIDTH-1:0] A_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
     reg signed [BITWIDTH-1:0] D_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
     reg signed [BITWIDTH-1:0] B_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
 
     // loader
-    wire block_addr_mask = {BITWIDTH{1'b1}} ^ {$clog2(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS){1'b1}};
-    reg [BITWIDTH-1:0] loader_write_block_addr; 
+    wire [BITWIDTH-1:0] block_size = MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS;
 
     always @(*) begin
-        integer i;
+        integer i, j;
 
-        // array
+        // array addrs + reads
         for (i = 0; i < MESHUNITS; i++) begin
-            A_tile_addr[i] = A_tile_read_addrs[i] & tile_addr_mask;
-            D_tile_addr[i] = D_tile_read_addrs[i] & tile_addr_mask;
-            B_tile_addr[i] = B_tile_read_addrs[i] & tile_addr_mask;
-            C_tile_addr[i] = C_tile_write_addrs[i] & tile_addr_mask;
-
-            A_buffer[i] = block_mem[A_tile_addr + TILEUNITS - 1:A_tile_addr];
-            D_buffer[i] = block_mem[D_tile_addr + TILEUNITS - 1:D_tile_addr];
-            B_buffer[i] = block_mem[B_tile_addr + TILEUNITS - 1:B_tile_addr];
+            for (j = 0; j < TILEUNITS; j++) begin
+                A_buffer[i][j] = block_mem[((A_tile_read_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + j];
+                D_buffer[i][j] = block_mem[((D_tile_read_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + j];
+                B_buffer[i][j] = block_mem[((B_tile_read_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + j];
+            end
         end
-
-        // loader
-        loader_write_block_addr = loader_write_addr & block_addr_mask;
     end
 
     assign A = A_buffer;
@@ -72,23 +60,24 @@ module blockmem
 
     always @(posedge clock) begin
         if (reset) begin
-            integer i;
-            for (i = 0; i < ADDRSIZE; i++) begin
-                block_mem[i] <= 0;
-            end
+            block_mem <= '{default: '0};
         end
         else begin
             // 2. array writes
-            integer i;
+            integer i, j;
             for (i = 0; i < MESHUNITS; i++) begin
                 if (C_write_valid[i]) begin
-                    block_mem[C_tile_addr[i] + TILEUNITS - 1:C_tile_addr[i]] <= C[i][TILEUNITS-1:0];
+                    for (j = 0; j < TILEUNITS; j++) begin
+                        block_mem[((C_tile_write_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + j] <= C[i][j];
+                    end
                 end
             end
 
             // 1. loader writes
             if (loader_write_valid) begin
-                block_mem[loader_write_block_addr + (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:loader_write_block_addr] = loader_write_data;
+                for (i = 0; i < block_size; i++) begin
+                    block_mem[((loader_write_addr >> $clog2(block_size)) << $clog2(block_size)) + j] = loader_write_data[i];
+                end
             end
         end
     end

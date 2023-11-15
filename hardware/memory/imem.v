@@ -15,31 +15,22 @@ module imem
         // WRITE SIGNALS
         input [BITWIDTH-1:0] write_addr,
         input [BITWIDTH-1:0] write_data,
-        input [BITWIDTH-1:0] write_valid
+        input write_valid
     );
 
-    reg signed [BITWIDTH-1:0] instr_mem [ADDRSIZE-1:0];
+    reg signed [BITWIDTH-1:0] instr_mem [ADDRSIZE-1:0] /*verilator public*/; 
 
-    wire instr_addr_mask = {BITWIDTH{1'b1}} ^ {2{1'b1}};
-    wire instr_addr1 = read_addr1 & instr_addr_mask;
-    wire instr_addr2 = read_addr2 & instr_addr_mask;
-    wire write_instr_addr = write_addr & instr_addr_mask;
-
-    // async read signals
-    assign read_instr1 = instr_mem[instr_addr1 + BITWIDTH - 1:instr_addr1];
-    assign read_instr2 = instr_mem[instr_addr2 + BITWIDTH - 1:instr_addr2];
+    assign read_instr1 = instr_mem[read_addr1 >> 2];
+    assign read_instr2 = instr_mem[read_addr2 >> 2];
 
     // sync write signals
     always @(posedge clock) begin
         if (reset) begin
-            integer i;
-            for (i = 0; i < ADDRSIZE; i++) begin
-                instr_mem[i] <= 0;
-            end
+            instr_mem <= '{default: '0};
         end
         else begin
             if (write_valid) begin
-                instr_mem[write_instr_addr] <= write_data;
+                instr_mem[write_addr >> 2] <= write_data;
             end
         end
     end

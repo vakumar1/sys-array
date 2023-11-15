@@ -1,9 +1,13 @@
 BUILD_DIR = obj_dir
 VINC = /usr/share/verilator/include
+SVDPIINC = /usr/share/verilator/include/vltstd
 SRC_DIR = software/src/
 TEST_DIR = software/test/
 
 ## TEST PARAMS
+
+# utils
+UART_UTILS_TEST_FILES = software/test/uart_util.cpp
 
 # sys array tests
 ARRAY_TST_NAME = sys_array
@@ -50,8 +54,8 @@ UART_CTRL_SIM_FILE = uart_controller_simulation
 # core tests
 CORE_TST_NAME = core
 CORE_HARDWARE_FILES = hardware/core.v hardware/memory/blockmem.v hardware/memory/imem.v $(ARR_CTRL_HARDWARE_FILES) $(UART_CTRL_HARDWARE_FILES)
-CORE_SRC_FILES =
-CORE_TEST_FILES = 
+CORE_SRC_FILES = 
+CORE_TEST_FILES = software/test/core_test.cpp $(UART_UTILS_TEST_FILES)
 CORE_SIM_FILE = core_simulation
 
 IMEM_ADDR_SIZE = 256 # 1 << 8
@@ -149,6 +153,13 @@ sim-arrayctrl:
 	$(ARR_CTRL_SRC_FILES) $(ARR_CTRL_TEST_FILES) $(BUILD_DIR)/V$(ARR_CTRL_TST_NAME)__ALL.a \
 	-DBITWIDTH=$(BITWIDTH) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
 	-o $(ARR_CTRL_SIM_FILE)
+
+sim-core:
+	g++ -g -I$(VINC) -I$(SVDPIINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
+	$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
+	$(CORE_SRC_FILES) $(CORE_TEST_FILES) $(BUILD_DIR)/V$(UART_TST_NAME)__ALL.a $(BUILD_DIR)/V$(CORE_TST_NAME)__ALL.a \
+	-o $(CORE_SIM_FILE)
+
 
 # RUN TESTS
 test-array:

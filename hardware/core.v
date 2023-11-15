@@ -46,11 +46,12 @@ module core
             // -> LOADER START
             loader_state <= LOADER_START;
             thread0_running <= 0;
-            thread1_running <= 1;
-            thread2_running <= 2;
+            thread1_running <= 0;
+            thread2_running <= 0;
         end
         else begin
             if (read_data_valid) begin
+                /* verilator lint_off CASEINCOMPLETE */
                 case (loader_state)
                     LOADER_START: begin
                         case (read_data[7:6])
@@ -80,7 +81,7 @@ module core
                         endcase
                     end
                     LOADER_IMEM_ADDR: begin
-                        loader_addr_buffer[8 * (loader_byte_ctr + 1) - 1:8 * loader_byte_ctr] <= read_data;
+                        loader_addr_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
                         if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
                             // -> IMEM DATA
                             loader_state <= LOADER_IMEM_DATA;
@@ -91,7 +92,7 @@ module core
                         end
                     end
                     LOADER_IMEM_DATA: begin
-                        loader_imem_data_buffer[8 * (loader_byte_ctr + 1) - 1:8 * loader_byte_ctr] <= read_data;
+                        loader_imem_data_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
                         if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
                             // write imem data
                             if (~thread0_running) begin
@@ -112,7 +113,7 @@ module core
                         end
                     end
                     LOADER_BMEM_ADDR: begin
-                        loader_addr_buffer[8 * (loader_byte_ctr + 1) - 1:8 * loader_byte_ctr] <= read_data;
+                        loader_addr_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
                         if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
                             // -> BMEM DATA
                             loader_state <= LOADER_BMEM_DATA;
@@ -123,7 +124,7 @@ module core
                         end
                     end
                     LOADER_BMEM_DATA: begin
-                        loader_bmem_data_buffer[(loader_byte_ctr >> 2)][8 * ((loader_byte_ctr & 0'b11) + 1) - 1:8 * (loader_byte_ctr & 0'b11)] <= read_data;
+                        loader_bmem_data_buffer[(loader_byte_ctr >> 2)][8 * (loader_byte_ctr[1:0]) +: 8] <= read_data;
                         if (loader_byte_ctr == (BITWIDTH >> 2) * (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1) begin
                             // write bmem data
                             write_valid_bmem <= 1;
