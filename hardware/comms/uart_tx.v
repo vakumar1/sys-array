@@ -20,12 +20,6 @@ module uart_transmitter
 
     // update tick counter on each clock edge
     reg [31:0] tick_ctr;
-    always @(posedge clock) begin
-        if (reset)
-            tick_ctr <= 0;
-        else
-            tick_ctr <= tick_ctr == SYMBOL_EDGE_TIME - 1 ? 0 : tick_ctr + 1;
-    end
 
     // update transmitter state on each symbol edge
     reg [1:0] state;
@@ -34,32 +28,37 @@ module uart_transmitter
     always @(posedge clock) begin
         if (reset) begin
             state <= WAITING;
+            tick_ctr <= 0;
         end
-        else if (tick_ctr == SYMBOL_EDGE_TIME - 1) begin            
-            case (state)
-                WAITING: begin
-                    if (data_in_valid & cts) begin
-                        state <= START;
-                        buffer <= data_in;
+        else if (state == WAITING) begin
+            if (data_in_valid & cts) begin
+                state <= START;
+                buffer <= data_in;
+            end
+            tick_ctr <= 0;
+        end
+        else begin
+            if (tick_ctr == SYMBOL_EDGE_TIME - 1) begin
+                case (state)
+                    START: begin
+                        state <= WRITING;
+                        bit_pos <= 7;
                     end
-                end
-                START: begin
-                    state <= WRITING;
-                    bit_pos <= 7;
-                end
-                WRITING: begin
-                    if (bit_pos == 0)
-                        state <= FINISH;
-                    if (bit_pos > 0)
-                        bit_pos <= bit_pos - 1;
-                end
-                FINISH: begin
-                    state <= WAITING;
-                end
-                default: begin
-                    state <= WAITING;
-                end
-            endcase
+                    WRITING: begin
+                        if (bit_pos == 0)
+                            state <= FINISH;
+                        if (bit_pos > 0)
+                            bit_pos <= bit_pos - 1;
+                    end
+                    FINISH: begin
+                        state <= WAITING;
+                    end
+                    default: begin
+                        state <= WAITING;
+                    end
+                endcase
+            end
+            tick_ctr <= tick_ctr == SYMBOL_EDGE_TIME - 1 ? 0 : tick_ctr + 1;
         end
     end
     
