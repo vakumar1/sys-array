@@ -82,7 +82,7 @@ module core
                     end
                     LOADER_IMEM_ADDR: begin
                         loader_addr_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
-                        if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
+                        if (loader_byte_ctr == (BITWIDTH >> 3) - 1) begin
                             // -> IMEM DATA
                             loader_state <= LOADER_IMEM_DATA;
                             loader_byte_ctr <= 0;
@@ -93,7 +93,7 @@ module core
                     end
                     LOADER_IMEM_DATA: begin
                         loader_imem_data_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
-                        if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
+                        if (loader_byte_ctr == (BITWIDTH >> 3) - 1) begin
                             // write imem data
                             if (~thread0_running) begin
                                 write_valid_imem0 <= 1;
@@ -114,7 +114,7 @@ module core
                     end
                     LOADER_BMEM_ADDR: begin
                         loader_addr_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
-                        if (loader_byte_ctr == (BITWIDTH >> 2) - 1) begin
+                        if (loader_byte_ctr == (BITWIDTH >> 3) - 1) begin
                             // -> BMEM DATA
                             loader_state <= LOADER_BMEM_DATA;
                             loader_byte_ctr <= 0;
@@ -125,7 +125,7 @@ module core
                     end
                     LOADER_BMEM_DATA: begin
                         loader_bmem_data_buffer[(loader_byte_ctr >> 2)][8 * (loader_byte_ctr[1:0]) +: 8] <= read_data;
-                        if (loader_byte_ctr == (BITWIDTH >> 2) * (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1) begin
+                        if (loader_byte_ctr == (BITWIDTH >> 3) * (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1) begin
                             // write bmem data
                             write_valid_bmem <= 1;
 

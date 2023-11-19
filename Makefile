@@ -146,6 +146,7 @@ sim-arrayctrl:
 sim-core:
 	$(SIM_COMPILE_CMD) \
 	$(CORE_SRC_FILES) \
+	-DIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) \
 	-o $(CORE_SIM_FILE)
 
 

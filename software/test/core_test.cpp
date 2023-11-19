@@ -12,6 +12,10 @@
 #include <vector>
 #include <string>
 
+#ifndef IMEM_ADDRSIZE
+#define IMEM_ADDRSIZE 1 << 8
+#endif
+
 #define INVALID 0x2A
 #define IMEM 0x40
 #define BMEM 0x80
@@ -83,11 +87,11 @@ int imem_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
 
     // send imem address and data
     send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, IMEM);
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         char byte = static_cast<char>((imem_addr >> (i * 8)) & (0xFF));
         send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, byte);
     }
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         char byte = static_cast<char>((imem_data >> (i * 8)) & (0xFF));
         send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, byte);
     }
@@ -96,10 +100,8 @@ int imem_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
     Vcore_imem__A100_B20* imem = write_imem == 0 ? core->core->_imem0
                                 : write_imem == 1 ? core->core->_imem1
                                 : core->core->_imem2;
-    unsigned int actual_imem_data = imem->instr_mem[(imem_addr >> 2) << 2];
-    if (actual_imem_data != imem_data) {
-        return SIM_ERROR;
-    }
+    unsigned int actual_imem_data = imem->instr_mem[(imem_addr >> 2) & (IMEM_ADDRSIZE - 1)];
+    data_err("IMEM[" + std::to_string((imem_addr >> 2) & (IMEM_ADDRSIZE - 1)) + "]", imem_data, actual_imem_data);
     return SUCCESS;
 }
 
@@ -122,8 +124,8 @@ int main(int argc, char** argv) {
     sender_init(driver_tickcount, driver_uart, driver_tfp);
     
     std::array<bool, 3> curr_state = {0};
-    unsigned int imem_addr = 0x2A;
-    unsigned int imem_data = 0x2B;
+    unsigned int imem_addr = 0x12345678;
+    unsigned int imem_data = 0xDEADBEEF;
     int res;
     res = imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, curr_state, 0, imem_addr, imem_data);
     if (res != SUCCESS) {

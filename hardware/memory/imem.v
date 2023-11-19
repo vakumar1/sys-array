@@ -20,8 +20,8 @@ module imem
 
     reg signed [BITWIDTH-1:0] instr_mem [ADDRSIZE-1:0] /*verilator public*/; 
 
-    assign read_instr1 = instr_mem[read_addr1 >> 2];
-    assign read_instr2 = instr_mem[read_addr2 >> 2];
+    assign read_instr1 = instr_mem[(read_addr1 >> 2) & (ADDRSIZE - 1)];
+    assign read_instr2 = instr_mem[(read_addr2 >> 2) & (ADDRSIZE - 1)];
 
     // sync write signals
     always @(posedge clock) begin
@@ -30,7 +30,7 @@ module imem
         end
         else begin
             if (write_valid) begin
-                instr_mem[write_addr >> 2] <= write_data;
+                instr_mem[(write_addr >> 2) & (ADDRSIZE - 1)] <= write_data;
             end
         end
     end
