@@ -47,17 +47,17 @@ ARR_CTRL_SRC_FILES = software/test/sysarray_ctrl_test.cpp $(ARR_CTRL_VERI_FILES)
 ARR_CTRL_SIM_FILE = sysarray_controller_simulation
 ADDRWIDTH = 32
 BITWIDTH = 32
-MESHROWS = 4
-MESHCOLS = 4
-TILEROWS = 4
-TILECOLS = 4
+MESHROWS = 2
+MESHCOLS = 2
+TILEROWS = 2
+TILECOLS = 2
 
 # core tests
 CORE_HARDWARE_FILES = hardware/core.v hardware/memory/blockmem.v hardware/memory/imem.v $(ARR_CTRL_HARDWARE_FILES) $(UART_CTRL_HARDWARE_FILES)
 CORE_SRC_FILES = software/test/core_test.cpp $(UTIL_SRC_FILES) $(CORE_VERI_FILES)
 CORE_SIM_FILE = core_simulation
 IMEM_ADDR_SIZE = 256 # 1 << 8
-BMEM_ADDR_SIZE = 65536 # 1 << 16
+BMEM_ADDR_SIZE = 256 # 1 << 16
 
 ## TARGETS
 
@@ -146,7 +146,7 @@ sim-arrayctrl:
 sim-core:
 	$(SIM_COMPILE_CMD) \
 	$(CORE_SRC_FILES) \
-	-DIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) \
+	-DIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) -DBMEM_ADDRSIZE=$(BMEM_ADDR_SIZE) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
 	-o $(CORE_SIM_FILE)
 
 

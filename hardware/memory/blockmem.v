@@ -39,7 +39,7 @@ module blockmem
     reg signed [BITWIDTH-1:0] B_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
 
     // loader
-    wire [BITWIDTH-1:0] block_size = MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS;
+    localparam BLOCK_SIZE = MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS;
 
     always @(*) begin
         integer i, j;
@@ -68,15 +68,15 @@ module blockmem
             for (i = 0; i < MESHUNITS; i++) begin
                 if (C_write_valid[i]) begin
                     for (j = 0; j < TILEUNITS; j++) begin
-                        block_mem[((C_tile_write_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + j] <= C[i][j];
+                        block_mem[(((C_tile_write_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) & (ADDRSIZE - 1)) + j] <= C[i][j];
                     end
                 end
             end
 
             // 1. loader writes
             if (loader_write_valid) begin
-                for (i = 0; i < block_size; i++) begin
-                    block_mem[((loader_write_addr >> $clog2(block_size)) << $clog2(block_size)) + j] = loader_write_data[i];
+                for (i = 0; i < BLOCK_SIZE; i++) begin
+                    block_mem[(((loader_write_addr >> $clog2(BLOCK_SIZE)) << $clog2(BLOCK_SIZE)) & (ADDRSIZE - 1)) + i] = loader_write_data[i];
                 end
             end
         end

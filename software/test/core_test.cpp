@@ -16,6 +16,18 @@
 #define IMEM_ADDRSIZE 1 << 8
 #endif
 
+#ifndef BMEM_ADDRSIZE
+#define BMEM_ADDRSIZE 1 << 16
+#endif
+
+#ifndef MESHUNITS
+#define MESHUNITS 4
+#endif
+
+#ifndef TILEUNITS
+#define TILEUNITS 4
+#endif
+
 #define INVALID 0x2A
 #define IMEM 0x40
 #define BMEM 0x80
@@ -50,6 +62,14 @@ void init(int& tickcount, Vcore* tb, VerilatedVcdC* tfp) {
 
 void send_byte(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp, 
                 int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, char byte) {
+
+    // wait a random number of cycles to catch edge errors
+    for (int i = 0; i < std::rand() % 5; i++) {
+        tick(core_tickcount, core, tfp);
+        sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
+    }
+
+    // init sender with data
     tick(core_tickcount, core, tfp);
     sender_tick(driver_uart, driver_tickcount, driver_tfp, byte, 1, 1);
 
@@ -105,6 +125,32 @@ int imem_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
     return SUCCESS;
 }
 
+int block_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp, int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, 
+                unsigned int bmem_addr, std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS> bmem_data) {
+    
+    // send imem address and data
+    send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, BMEM);
+    for (int i = 0; i < 4; i++) {
+        char byte = static_cast<char>((bmem_addr >> (i * 8)) & (0xFF));
+        send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, byte);
+    }
+    for (int i = 0; i < (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS); i++) {
+        for (int j = 0; j < 4; j++) {
+            char byte = static_cast<char>((bmem_data[i] >> (j * 8)) & (0xFF));
+            send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, byte);
+        }
+    }
+
+    // check that imem was correctly stored
+    unsigned int mask_bmem_addr = ((bmem_addr >> 2) << 2) & (BMEM_ADDRSIZE - 1);
+    for (int i = 0; i < (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS); i++) {
+        unsigned int actual_bmem_data = core->core->_blockmem->block_mem[mask_bmem_addr + i];
+        data_err("BMEM[" + std::to_string(mask_bmem_addr) + "+" + std::to_string(i) + "]", bmem_data[i], actual_bmem_data);
+    }
+    return SUCCESS;
+
+}
+
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Vcore* core = new Vcore;
@@ -128,12 +174,13 @@ int main(int argc, char** argv) {
     unsigned int imem_data = 0xDEADBEEF;
     int res;
     res = imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, curr_state, 0, imem_addr, imem_data);
-    if (res != SUCCESS) {
-        printf("Imem store failed.\n");
-        tfp->close();
-        driver_tfp->close();
-        return 0;
+
+    unsigned int bmem_addr = 0x87654321;
+    std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS> bmem_data;
+    for (int i = 0; i < MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS; i++) {
+        bmem_data[i] = i;
     }
+    res = block_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, bmem_addr, bmem_data);
     tfp->close();
     driver_tfp->close();
     printf("All core tests succeeded.\n");
