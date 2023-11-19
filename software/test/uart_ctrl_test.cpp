@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "uart_util.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +8,6 @@
 #include "verilated_vcd_c.h"
 #include <vector>
 #include <string>
-
-#define SYMBOL_TICK_COUNT 1085
 
 void tick(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp) {
     tb->eval();
@@ -59,9 +58,7 @@ int test_write_lock_acq(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp
 int test_write_byte(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, char data, int index) {
     tb->data_in[index] = data;
     tb->data_in_valid[index] = 1;
-    if (!tb->write_ready) {
-        return SIM_ERROR;
-    }
+    signal_err("uartctrl->write_ready", 1, tb->write_ready);
     tick(tickcount, tb, tfp);
 
     // wait until uart starts reading

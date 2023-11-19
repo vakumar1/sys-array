@@ -4,6 +4,33 @@
 
 #define SYMBOL_TICK_COUNT 1085
 
+//
+// RECEIVER UTILS
+//
+
+void receiver_init(int& tickcount, Vuart* receiver, VerilatedVcdC* tfp) {
+    receiver->reset = 1;
+    tick(tickcount, receiver, tfp);
+    receiver->reset = 0;
+    receiver_tick(receiver, tickcount, tfp, 1);
+}
+
+void receiver_tick(Vuart* receiver, int& tickcount, VerilatedVcdC* tfp,
+                    char sender_serial_out) {
+    receiver->reset = 0;
+    receiver->data_in = 0;                      // unused
+    receiver->data_in_valid = 0;                // unused
+    receiver->serial_in = sender_serial_out;
+    receiver->local_ready = 1;
+    receiver->cts = 0;                          // unused
+    tick(tickcount, receiver, tfp);
+}
+
+
+//
+// SENDER UTILS
+//
+
 // returns an array of bits corresponding to the serial line sent by the transmitter sending a byte
 void sender_byte_bits(char data, std::vector<int>& result) {
     result.resize(0);
@@ -46,6 +73,10 @@ void sender_tick(Vuart* sender, int& tickcount, VerilatedVcdC* tfp,
     sender->cts = receiver_rts;
     tick(tickcount, sender, tfp);
 }
+
+//
+// GENERAL
+//
 
 // tick for a uart module
 void tick(int& tickcount, Vuart* tb, VerilatedVcdC* tfp) {

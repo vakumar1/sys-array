@@ -44,15 +44,16 @@ void init(int& tickcount, Vcore* tb, VerilatedVcdC* tfp) {
     tick(tickcount, tb, tfp);
 }
 
-void send_byte(int& driver_tickcount, Vuart* driver_uart, int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, char byte) {
+void send_byte(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp, 
+                int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, char byte) {
     tick(core_tickcount, core, tfp);
-    sender_tick(driver_uart, driver_tickcount, tfp, byte, 1, 1);
+    sender_tick(driver_uart, driver_tickcount, driver_tfp, byte, 1, 1);
 
     // send initial bit and initialize receiver to READING state
-    for (int i = 1; i < SYMBOL_TICK_COUNT; i++) {
+    for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
         core->serial_in = driver_uart->serial_out;
         tick(core_tickcount, core, tfp);
-        sender_tick(driver_uart, driver_tickcount, tfp, 0x0, 0, 1);
+        sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
     }
 
     // send bits 0-7
@@ -60,7 +61,7 @@ void send_byte(int& driver_tickcount, Vuart* driver_uart, int& core_tickcount, V
         for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
             core->serial_in = driver_uart->serial_out;
             tick(core_tickcount, core, tfp);
-            sender_tick(driver_uart, driver_tickcount, tfp, 0x0, 0, 1);
+            sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
         }
     }
 
@@ -68,27 +69,27 @@ void send_byte(int& driver_tickcount, Vuart* driver_uart, int& core_tickcount, V
     for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
         core->serial_in = driver_uart->serial_out;
         tick(core_tickcount, core, tfp);
-        sender_tick(driver_uart, driver_tickcount, tfp, 0x0, 0, 1);
+        sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
     }
 }
 
-int imem_store(int& driver_tickcount, Vuart* driver_uart, int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, 
+int imem_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp, int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, 
                 std::array<bool, 3> curr_imem, int write_imem, unsigned int imem_addr, unsigned int imem_data) {
     // send update to halt thread IMEM_IDX
     int run_thread0 = (write_imem == 0 || !curr_imem[0]) ? 0 : 1;
     int run_thread1 = (write_imem == 1 || !curr_imem[1]) ? 0 : 1;
     int run_thread2 = (write_imem == 2 || !curr_imem[2]) ? 0 : 1;
-    send_byte(driver_tickcount, driver_uart, core_tickcount, core, tfp, UPDATE(run_thread0, run_thread1, run_thread2));
+    send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, UPDATE(run_thread0, run_thread1, run_thread2));
 
     // send imem address and data
-    send_byte(driver_tickcount, driver_uart, core_tickcount, core, tfp, IMEM);
+    send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, IMEM);
     for (int i = 0; i < 3; i++) {
         char byte = static_cast<char>((imem_addr >> (i * 8)) & (0xFF));
-        send_byte(driver_tickcount, driver_uart, core_tickcount, core, tfp, byte);
+        send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, byte);
     }
     for (int i = 0; i < 3; i++) {
         char byte = static_cast<char>((imem_data >> (i * 8)) & (0xFF));
-        send_byte(driver_tickcount, driver_uart, core_tickcount, core, tfp, byte);
+        send_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, byte);
     }
 
     // check that imem was correctly stored
@@ -115,17 +116,24 @@ int main(int argc, char** argv) {
     init(core_tickcount, core, tfp);
 
     int driver_tickcount = 0;
-    sender_init(driver_tickcount, driver_uart, NULL);
+    VerilatedVcdC* driver_tfp = new VerilatedVcdC;
+    driver_uart->trace(driver_tfp, 99);
+    driver_tfp->open("driver_uart.vcd");
+    sender_init(driver_tickcount, driver_uart, driver_tfp);
     
     std::array<bool, 3> curr_state = {0};
     unsigned int imem_addr = 0x2A;
-    unsigned int imem_data = 0x2A;
+    unsigned int imem_data = 0x2B;
     int res;
-    res = imem_store(driver_tickcount, driver_uart, core_tickcount, core, tfp, curr_state, 0, imem_addr, imem_data);
+    res = imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, curr_state, 0, imem_addr, imem_data);
     if (res != SUCCESS) {
         printf("Imem store failed.\n");
-        return;
+        tfp->close();
+        driver_tfp->close();
+        return 0;
     }
+    tfp->close();
+    driver_tfp->close();
     printf("All core tests succeeded.\n");
-
+    return 0;
 }
