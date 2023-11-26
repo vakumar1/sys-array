@@ -5,10 +5,14 @@
 #include <stdlib.h>
 #include "Vcore.h"
 #include "Vcore_core.h"
-#include "Vcore_imem__A100_B20.h"
 #include "Vuart.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
+
+// verilator build dependencies used for debugging mem state
+#include "Vcore_imem__A100_B20.h"
+#include "Vcore_blockmem__A100_B20_M2_T2.h"
+
 #include <vector>
 #include <string>
 

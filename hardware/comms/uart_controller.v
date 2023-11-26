@@ -32,6 +32,7 @@ module uart_controller
     wire WRITE_LOCK_ZERO = write_lock[0];
     wire WRITE_LOCK_ONE = write_lock[1];
     reg write_lock [1:0];
+    wire write_ready;
 
     // UART STATE
     wire [7:0] uart_data_in = WRITE_LOCK_FREE
@@ -58,9 +59,9 @@ module uart_controller
             write_lock[0] <= 0;
             write_lock[1] <= 0;
         end
-        else begin
+        else if (write_ready) begin
 
-            // UPDATE WRITE LOCK SYNCH.
+            // UPDATE WRITE LOCK SYNCH. (only if UART is ready to write)
             if (WRITE_LOCK_FREE) begin
                 if (write_lock_req[0]) begin
                     write_lock[0] <= 1;

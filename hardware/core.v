@@ -141,6 +141,11 @@ module core
         end
     end
 
+    // THREADS
+    wire thread0_idx = 0;
+    wire thread1_idx = thread0_running ? 1 : 0;
+    wire thread2_idx = (thread0_running | thread1_running) ? 1 : 0;
+
     // SYS ARRAY
     // COMP LOGIC SIGNALS <-> THREADS
     reg comp_lock_req [1:0];
