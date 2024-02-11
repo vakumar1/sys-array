@@ -29,3 +29,25 @@ void data_err(std::string var, char expected, char actual) {
             + " actual=" + std::to_string(static_cast<int>(actual));
     throw std::runtime_error(msg);
 }
+
+void condition_err(std::string condition_msg, std::function<bool()> condition) {
+    if (!condition())
+        return;
+    std:: string msg = "[condition=" + condition_msg + "] not met";
+    throw std::runtime_error(msg);
+}
+
+void test_runner(VerilatedVcdC* tfp, std::string test_header, std::string test_name, std::function<void()> test) {
+    try
+    {
+        printf((test_header + " - " + test_name + "\n").c_str());
+        test();
+    }
+    catch (const std::runtime_error e)
+    {
+        printf(e.what());
+        printf("\n");
+        tfp->close();
+        exit(0);
+    }
+};

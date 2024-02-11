@@ -43,7 +43,6 @@ module fifo
                 buffer_start <= buffer_start == BUFFER_SIZE - 1
                                     ? 0
                                     : buffer_start + 1;
-                buffer_count <= buffer_count - 1;
                 last_read <= buffer[buffer_start];
                 last_read_valid <= 1;
             end
