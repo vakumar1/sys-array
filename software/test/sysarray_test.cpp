@@ -50,83 +50,6 @@ void tick(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp) {
     tickcount++;
 }
 
-int basic_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int c_rows,
-                    std::vector<std::vector<int>>& A, std::vector<std::vector<int>>& B,
-                    std::vector<std::vector<int>>& D, std::vector<std::vector<int>>& expected_C) {
-
-    // init
-    tb->reset = 1;
-    tick(tickcount, tb, tfp);
-    tb->reset = 0;
-    tick(tickcount, tb, tfp);
-
-    feeding_mat_state A_state(MESHROWS, TILEROWS, c_rows, true);
-    feeding_mat_state B_state(MESHCOLS, TILECOLS, MESHROWS * TILEROWS, false);
-    reading_mat_state C_state(MESHCOLS, TILECOLS, c_rows, true);
-    feeding_mat_state D_state(MESHCOLS, TILECOLS, c_rows, true);
-
-    // propagate B through array
-    unsigned char propagate = 0;
-    B_state.start();
-    while (true) {
-        tick(tickcount, tb, tfp);
-        for (int i = 0; i < MESHCOLS; i++) {
-            for (int j = 0; j < TILECOLS; j++) {
-                tb->in_propagate[i][j] = propagate;
-                tb->in_b_shelf_life[i][j] = B_state.current_row(i) + 1;
-            }
-        }
-        bool done = B_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(MESHROWS * TILEROWS, B, tb->in_b, tb->in_b_valid);
-        A_state.update<MESHROWS * TILEROWS, MESHROWS, TILEROWS>(c_rows, A, tb->in_a, tb->in_a_valid);
-        D_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(c_rows, D, tb->in_d, tb->in_d_valid);
-
-        if (done) {
-            break;
-        }
-    }
-
-    // propagate A and D through array
-    // loop until A and D are done feeding and C is done reading, or C becomes invalid
-    propagate = 1;
-    A_state.start();
-    D_state.start();
-    C_state.start();
-    std::vector<std::vector<int>> C(c_rows, std::vector<int>(MESHCOLS * TILECOLS));
-    bool c_valid = true;
-    int waiting_iters = 0;
-    while (true) {
-        tick(tickcount, tb, tfp);
-        B_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(MESHROWS * TILEROWS, B, tb->in_b, tb->in_b_valid);
-        bool a_done = A_state.update<MESHROWS * TILEROWS, MESHROWS, TILEROWS>(c_rows, A, tb->in_a, tb->in_a_valid);
-        bool d_done = D_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(c_rows, D, tb->in_d, tb->in_d_valid);
-        bool c_done = C_state.update<MESHCOLS * TILECOLS, MESHCOLS, TILECOLS>(c_rows, tb->out_c, tb->out_c_valid, C);
-        c_valid = C_state.valid();
-        for (int i = 0; i < MESHCOLS; i++) {
-            for (int j = 0; j < TILECOLS; j++) {
-                tb->in_propagate[i][j] = propagate;
-            }
-        }
-        if (!c_valid || waiting_iters >= 10) {
-            return SIM_ERROR;
-        }
-        if ((a_done && d_done)) {
-            waiting_iters++;
-            if (c_done) {
-                break;
-            }
-        }
-    }
-
-    for (int i = 0; i < c_rows; i++) {
-        for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
-            if (expected_C[i][j] != C[i][j]) {
-                return SIM_ERROR;
-            }
-        }
-    }
-    return SUCCESS;
-}
-
 int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mats, std::vector<int> c_rows,
                     std::vector<std::vector<std::vector<int>>>& A, std::vector<std::vector<std::vector<int>>>& B,
                     std::vector<std::vector<std::vector<int>>>& D, std::vector<std::vector<std::vector<int>>>& expected_C) {
@@ -194,15 +117,13 @@ int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mat
             bool c_valid = C_state.valid();
 
             // wait until all inputs and outputs are done
+            signal_err("c_valid", c_valid, 1);
+            condition_err("Timed out waiting for C output", [waiting_iters](){ return waiting_iters >= 10; });
             if ((b_done && a_done && d_done)) {
                 waiting_iters++;
                 if (c_done) {
                     break;
                 }
-            }
-
-            if (!c_valid || waiting_iters >= 10) {
-                return SIM_ERROR;
             }
         }
         // alternate propagate for next iteration
@@ -212,11 +133,11 @@ int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mat
         if (ignore_collecting) {
             continue;
         }
+        char C_msg[100];
         for (int i = 0; i < collecting_c_rows; i++) {
             for (int j = 0; j < MESHCOLS * TILECOLS; j++) {
-                if (expected_C[collecting_idx][i][j] != C_mat[i][j]) {
-                    return SIM_ERROR;
-                }
+                sprintf(C_msg, "C[%d][%d][%d]", collecting_idx, i, j);
+                data_err(C_msg, expected_C[collecting_idx][i][j], C_mat[i][j]);
             }
         }
     }
@@ -316,11 +237,15 @@ int main(int argc, char** argv) {
         expected_Cs.push_back(expected_C);
     }
 
-    int res = multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs);
-    printf("Test %s: num_mats=%d height=%d rand=%d id=%d aff=%d neg=%d\n", 
-            ((res == SUCCESS) ? "passed" : "failed"),
-            num_mats, height, random, identity, affine, negative);
 
+    void test_runner(VerilatedVcdC* tfp, std::string test_header, std::string test_name, std::function<void()> test);
+
+    char matmul_test_name[100];
+    sprintf(matmul_test_name, "MULTI MATMUL: num_mats=%d height=%d rand=%d id=%d aff=%d neg=%d",
+            num_mats, height, random, identity, affine, negative);
+    test_runner(tfp, "[SYS ARRAY]", matmul_test_name, 
+            [&tickcount, &tb, &tfp, num_mats, c_rows_s, &As, &Bs, &Ds, &expected_Cs](){ multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs); });
+    printf("All tests passed\n");
     tfp->close();
     return 0;
 }

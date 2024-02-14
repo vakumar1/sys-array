@@ -38,12 +38,12 @@ UART_CTRL_SIM_FILE = uart_controller_simulation
 
 # sys array tests
 ARRAY_HARDWARE_FILES = hardware/sys_array.v
-ARRAY_SRC_FILES = software/src/matrix_state.cpp software/test/sysarray_test.cpp $(ARR_VERI_FILES)
+ARRAY_SRC_FILES = software/src/matrix_state.cpp software/test/sysarray_test.cpp $(UTIL_SRC_FILES) $(ARR_VERI_FILES)
 ARRAY_SIM_FILE = sysarray_simulation
 
 # sys array controller tests
 ARR_CTRL_HARDWARE_FILES = hardware/sys_array_controller.v $(ARRAY_HARDWARE_FILES)
-ARR_CTRL_SRC_FILES = software/test/sysarray_ctrl_test.cpp $(ARR_CTRL_VERI_FILES)
+ARR_CTRL_SRC_FILES = software/test/sysarray_ctrl_test.cpp $(UTIL_SRC_FILES) $(ARR_CTRL_VERI_FILES)
 ARR_CTRL_SIM_FILE = sysarray_controller_simulation
 ADDRWIDTH = 32
 BITWIDTH = 32
