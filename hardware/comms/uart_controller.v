@@ -32,27 +32,6 @@ module uart_controller
     wire WRITE_LOCK_ZERO = write_lock[0];
     wire WRITE_LOCK_ONE = write_lock[1];
     reg write_lock [1:0];
-    wire write_ready;
-
-    // UART STATE
-    wire [7:0] uart_data_in = WRITE_LOCK_FREE
-                            ? 0
-                            : WRITE_LOCK_ZERO
-                                ? data_in[0]
-                                : data_in[1];
-    wire uart_data_in_valid = WRITE_LOCK_FREE
-                            ? 0
-                            : WRITE_LOCK_ZERO
-                                ? data_in_valid[0]
-                                : data_in_valid[1];
-
-    // UART->FIFO SIGNALS
-    wire [7:0] last_uart_read_byte;
-    wire last_uart_read_valid;
-
-    // FIFO STATE
-    reg fifo_empty;
-    reg fifo_full;
 
     always @(posedge clock) begin
         if (reset) begin
@@ -101,41 +80,88 @@ module uart_controller
 
     assign write_lock_res = write_lock;
 
+    // UART write signals
+    reg uart_write_ready;
+    reg [7:0] uart_data_in;
+    reg uart_data_in_valid;
+    assign write_ready = uart_write_ready;
+
+    // UART read signals
+    reg [7:0] uart_data_out;
+    reg uart_data_out_valid;
+
     uart #(BAUD_RATE, CLOCK_FREQ)
     _uart (
         .clock(clock),
         .reset(reset),
 
-        // write data directly to UART (if lock acq. and valid)
-        .tx_ready(write_ready),
+        // write data from W_FIFO -> UART
+        .tx_ready(uart_write_ready),
         .data_in(uart_data_in),
         .data_in_valid(uart_data_in_valid),
 
-        // read data from UART directly to FIFO if FIFO not full
-        .data_out(last_uart_read_byte),
-        .data_out_valid(last_uart_read_valid),
+        // read data from UART to R_FIFO
+        .data_out(uart_data_out),
+        .data_out_valid(uart_data_out_valid),
         .serial_in(serial_in),
         .serial_out(serial_out),
-        .local_ready(~fifo_full),
+        .local_ready(1), // TODO: use R_FIFO signals to control UART reads
         .cts(1), // TODO: use control signals from driver
         .rts() // TODO: use control signals from driver
     );
 
+
+    // W_FIFO signals
+    reg write_fifo_empty;
+    reg write_fifo_full;
+
+    // filtered (lock-checked) INPUT->W_FIFO write data
+    wire [7:0] filtered_data_in = WRITE_LOCK_FREE
+                                    ? 0
+                                    : WRITE_LOCK_ZERO
+                                        ? data_in[0]
+                                        : data_in[1];
+    wire filtered_data_in_valid = WRITE_LOCK_FREE
+                                    ? 0
+                                    : WRITE_LOCK_ZERO
+                                        ? data_in_valid[0]
+                                        : data_in_valid[1];
     fifo #(BUFFER_SIZE)
-    _fifo (
+    _write_fifo (
         .clock(clock),
         .reset(reset),
 
-        // attempt to write data from UART to FIFO
-        .write(last_uart_read_valid),
-        .data_in(last_uart_read_byte),
+        // attempt to write data from input to FIFO
+        .write(filtered_data_in_valid),
+        .data_in(filtered_data_in),
 
-        // attempt to read data from FIFO
+        // connect W_FIFO to UART data in (if UART ready)
+        .read(uart_write_ready),
+        .data_out(uart_data_in),
+        .data_out_valid(uart_data_in_valid),
+        .empty(write_fifo_empty),
+        .full(write_fifo_full)
+    );
+
+    // R_FIFO signals
+    reg read_fifo_empty;
+    reg read_fifo_full;
+
+    fifo #(BUFFER_SIZE)
+    _read_fifo (
+        .clock(clock),
+        .reset(reset),
+
+        // attempt to write data from UART data out to FIFO
+        .write(uart_data_out_valid),
+        .data_in(uart_data_out),
+
+        // attempt to read data from FIFO to output
         .read(read_valid),
         .data_out(data_out),
         .data_out_valid(data_out_valid),
-        .empty(fifo_empty),
-        .full(fifo_full)
+        .empty(read_fifo_empty),
+        .full(read_fifo_full)
     );
 
 endmodule
