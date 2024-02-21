@@ -15,6 +15,7 @@ UART_VERI_FILES = $(BUILD_DIR)/Vuart__ALL.a
 UART_CTRL_VERI_FILES = $(BUILD_DIR)/Vuart_controller__ALL.a
 ARR_VERI_FILES = $(BUILD_DIR)/Vsys_array__ALL.a
 ARR_CTRL_VERI_FILES = $(BUILD_DIR)/Vsys_array_controller__ALL.a
+THREAD_VERI_FILES = $(BUILD_DIR)/Vthread__ALL.a
 CORE_VERI_FILES = $(BUILD_DIR)/Vcore__ALL.a
 
 # SIMULATION BUILD RESULT PARAMS (must include source files, dependencies, and verilator build files)
@@ -52,8 +53,13 @@ MESHCOLS = 2
 TILEROWS = 2
 TILECOLS = 2
 
+# thread tests
+THREAD_HARDWARE_FILES = hardware/thread.v
+THREAD_SRC_FILES = software/test/thread_test.cpp $(UTIL_SRC_FILES) $(UART_VERI_FILES) $(THREAD_VERI_FILES)
+THREAD_SIM_FILE = thread_simulation
+
 # core tests
-CORE_HARDWARE_FILES = hardware/core.v hardware/memory/blockmem.v hardware/memory/imem.v $(ARR_CTRL_HARDWARE_FILES) $(UART_CTRL_HARDWARE_FILES)
+CORE_HARDWARE_FILES = hardware/core.v hardware/thread.v hardware/memory/blockmem.v hardware/memory/imem.v $(ARR_CTRL_HARDWARE_FILES) $(UART_CTRL_HARDWARE_FILES)
 CORE_SRC_FILES = software/test/core_test.cpp $(UTIL_SRC_FILES) $(CORE_VERI_FILES)
 CORE_SIM_FILE = core_simulation
 IMEM_ADDR_SIZE = 256 # 1 << 8
@@ -70,6 +76,8 @@ uartctrl: veri-uartctrl sim-uartctrl
 array: veri-array sim-array
 
 arrayctrl: veri-arrayctrl sim-arrayctrl
+
+thread: veri-thread sim-thread
 
 core: veri-core sim-core
 
@@ -108,6 +116,13 @@ veri-arrayctrl:
 	cd $(BUILD_DIR); \
 	make -f Vsys_array_controller.mk;
 
+veri-thread:
+	verilator -Wno-style \
+	-GBITWIDTH=$(BITWIDTH) -GMESHUNITS=$(MESHROWS) -GTILEUNITS=$(TILEROWS) \
+	--trace -cc $(THREAD_HARDWARE_FILES)
+	cd $(BUILD_DIR); \
+	make -f Vthread.mk;
+
 veri-core: veri-uart
 	verilator -Wno-style \
 	-GBITWIDTH=$(BITWIDTH) -GIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) -GBMEM_ADDRSIZE=$(BMEM_ADDR_SIZE) -GMESHUNITS=$(MESHROWS) -GTILEUNITS=$(TILEROWS) \
@@ -142,6 +157,12 @@ sim-arrayctrl:
 	$(ARR_CTRL_SRC_FILES) \
 	-DBITWIDTH=$(BITWIDTH) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
 	-o $(ARR_CTRL_SIM_FILE)
+
+sim-thread:
+	$(SIM_COMPILE_CMD) \
+	$(THREAD_SRC_FILES) \
+	-DBITWIDTH=$(BITWIDTH) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
+	-o $(THREAD_SIM_FILE)
 
 sim-core:
 	$(SIM_COMPILE_CMD) \
