@@ -52,7 +52,7 @@ module thread
     reg [BITWIDTH-1:0] write_byte_ctr;
     reg [BITWIDTH-1:0] write_bmem_idx_ctr;
     localparam BLOCK_SIZE = MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS;
-    localparam [BITWIDTH-1:0] WRITE_BYTECOUNT = 1 + BITWIDTH * BLOCK_SIZE;
+    localparam [BITWIDTH-1:0] WRITE_BYTECOUNT = 1 + 4 * BLOCK_SIZE;
 
     // synchronization signals
     reg write_lock_req_buf;
@@ -71,13 +71,18 @@ module thread
         if (reset) begin
             thread_state <= THREAD_DONE;
             write_lock_req_buf <= 0;
+            write_data_buf <= 0;
+            write_data_valid_buf <= 0;
+            pc <= 0;
         end
         else begin
             /* verilator lint_off CASEINCOMPLETE */
             case (thread_state)
                 THREAD_DONE: begin
-                    if (running)
+                    if (running) begin
                         thread_state <= THREAD_READ_INST;
+                        pc <= 0;
+                    end
                 end
                 THREAD_READ_INST: begin
                     if (~running) begin
@@ -94,8 +99,11 @@ module thread
                                 thread_state <= THREAD_WRITE_LOCK;
                                 write_header <= imem_data[17:10];
                                 write_bmem_addr <= {24'b0, imem_data[9:2]} << 8;
+
+                                // send write lock req signal 
+                                // + initialize byte counter to read bmem data on next tick
+                                write_lock_req_buf <= 1;
                                 write_byte_ctr <= 0;
-                                write_bmem_idx_ctr <= 0;
                             end
                         endcase
                     end
@@ -114,9 +122,6 @@ module thread
                 // 
                 THREAD_WRITE_LOCK: begin
                     // request write lock and proceed once acquired
-                    write_lock_req_buf <= 1;
-                    write_data_valid_buf <= 0;
-                    write_byte_ctr <= write_byte_ctr + 1;
                     if (write_lock_res) begin
                         thread_state <= THREAD_WRITE_BYTECOUNT;
                         write_byte_ctr <= 0;
@@ -132,6 +137,7 @@ module thread
                         // complete bytecount write
                         if (write_byte_ctr == 4) begin
                             thread_state <= THREAD_WRITE_HEADER;
+                            write_data_valid_buf <= 0;
                             write_byte_ctr <= 0;
                         end
 
@@ -151,7 +157,9 @@ module thread
                         // complete 1B header write
                         if (write_byte_ctr == 1) begin
                             thread_state <= THREAD_WRITE_DATA;
+                            write_data_valid_buf <= 0;
                             write_byte_ctr <= 0;
+                            write_bmem_idx_ctr <= 0;
                         end
 
                         // write header byte to UART
@@ -168,18 +176,12 @@ module thread
                 THREAD_WRITE_DATA: begin
                     if (write_ready) begin
                         // complete bmem word write
-                        if (write_byte_ctr == 4) begin
-                            // update index/byte counters
-                            write_byte_ctr <= 0;
-                            write_bmem_idx_ctr <= write_bmem_idx_ctr + 1;
-
-                            // complete bmem data write (and relinquish write lock)
-                            if (write_bmem_idx_ctr == BLOCK_SIZE) begin
-                                write_lock_req_buf <= 0;
-                                if (~write_lock_res) begin
-                                    pc <= pc + 4;
-                                    thread_state <= THREAD_READ_INST;
-                                end
+                        if (write_bmem_idx_ctr == BLOCK_SIZE) begin
+                            write_lock_req_buf <= 0;
+                            write_data_valid_buf <= 0;
+                            if (~write_lock_res) begin
+                                pc <= pc + 4;
+                                thread_state <= THREAD_READ_INST;
                             end
                         end
 
@@ -187,7 +189,8 @@ module thread
                         else begin
                             write_data_buf <= bmem_data[write_bmem_idx_ctr][8 * (write_byte_ctr) +: 8];
                             write_data_valid_buf <= 1;
-                            write_byte_ctr <= write_byte_ctr + 1;
+                            write_byte_ctr <= write_byte_ctr == 3 ? 0 : write_byte_ctr + 1;
+                            write_bmem_idx_ctr <= write_byte_ctr == 3 ? write_bmem_idx_ctr + 1 : write_bmem_idx_ctr;
                         end
                     end
                     else begin
