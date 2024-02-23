@@ -33,8 +33,12 @@ module thread
         input load_finished,
 
         // sysarray ctrl: comp signals
+        output [BITWIDTH-1:0] A_addr,
+        output [BITWIDTH-1:0] D_addr,
+        output [BITWIDTH-1:0] C_addr,
         output comp_lock_req,
-        input comp_lock_res
+        input comp_lock_res,
+        input comp_finished
     );
 
     // instructions
@@ -59,7 +63,12 @@ module thread
         // LOAD instr.
         THREAD_LOAD_ACQ_LOCK            = 4'd7,
         THREAD_LOAD_WAIT                = 4'd8,
-        THREAD_LOAD_REL_LOCK            = 4'd9;
+        THREAD_LOAD_REL_LOCK            = 4'd9,
+
+        // COMP instr.
+        THREAD_COMP_ACQ_LOCK            = 4'd10,
+        THREAD_COMP_WAIT                = 4'd11,
+        THREAD_COMP_REL_LOCK            = 4'd12;
     
     reg [3:0] thread_state;
 
@@ -96,6 +105,18 @@ module thread
     // addrs
     reg [BITWIDTH-1:0] B_addr_buf;
     assign B_addr = B_addr_buf;
+
+    // COMP instruction: signals + data
+    reg comp_lock_req_buf;
+    assign comp_lock_req = comp_lock_req_buf;
+
+    // addrs
+    reg [BITWIDTH-1:0] A_addr_buf;
+    reg [BITWIDTH-1:0] D_addr_buf;
+    reg [BITWIDTH-1:0] C_addr_buf;
+    assign A_addr = A_addr_buf;
+    assign D_addr = D_addr_buf;
+    assign C_addr = C_addr_buf;
 
     always @(posedge clock) begin
         if (reset) begin
@@ -136,12 +157,19 @@ module thread
                                 write_byte_ctr <= 0;
                             end
                             LOAD: begin
-                                // start LOAD instruction ()
+                                // start LOAD instruction
                                 thread_state <= THREAD_LOAD_ACQ_LOCK;
                                 B_addr_buf <= {24'b0, imem_data[9:2]} << 8;
 
                                 // send load lock req signal
                                 load_lock_req_buf <= 1;
+                            end
+                            COMP: begin
+                                // start COMP instruction
+                                thread_state <= THREAD_COMP_ACQ_LOCK;
+                                A_addr_buf <= {24'b0, imem_data[9:2]} << 8;
+                                D_addr_buf <= {24'b0, imem_data[17:10]} << 8;
+                                C_addr_buf <= {24'b0, imem_data[25:18]} << 8;                                
                             end
                         endcase
                     end
@@ -156,7 +184,7 @@ module thread
                 // |unused  |header  |addr    |code    |
                 // |(14)    |(8)     |(8)     |(2)     |   
                 //    
-                // |32 -- 18|17 -- 10|9 --   2|1 --   0|
+                // |31 -- 18|17 -- 10|9 --   2|1 --   0|
                 // 
                 THREAD_WRITE_ACQ_LOCK: begin
                     // request write lock and proceed once acquired
@@ -245,7 +273,7 @@ module thread
                 // |unused  |B_addr  |code    |
                 // |(22)    |(8)     |(2)     |   
                 //    
-                // |32 -- 10|9 --   2|1 --   0|
+                // |31 -- 10|9 --   2|1 --   0|
                 //
                 THREAD_LOAD_ACQ_LOCK: begin
                     // request load lock and proceed once acquired
@@ -261,6 +289,33 @@ module thread
                 end
                 THREAD_LOAD_REL_LOCK: begin
                     if (~load_lock_res) begin
+                        thread_state <= THREAD_READ_INST;
+                        pc <= pc + 4;
+                    end
+                end
+
+                // COMP instruction: submits A, C, and D addrs to sys array ctrl
+                // and synchronously waits until comp completes
+                //
+                // |unused  |C_addr  |D_addr  |A_addr  |code    |
+                // |(6)     |(8)     |(8)     |(8)     |(2)     |
+                //    
+                // |31 -- 26|25 -- 18|17 -- 10|9 --   2|1 --   0|
+                //
+                THREAD_COMP_ACQ_LOCK: begin
+                    // request COMP lock and proceed once acquired
+                    if (comp_lock_res) begin
+                        thread_state <= THREAD_COMP_WAIT;
+                    end
+                end
+                THREAD_COMP_WAIT: begin
+                    if (comp_finished) begin
+                        thread_state <= THREAD_COMP_REL_LOCK;
+                        comp_lock_req_buf <= 0;
+                    end
+                end
+                THREAD_COMP_REL_LOCK: begin
+                    if (~comp_lock_res) begin
                         thread_state <= THREAD_READ_INST;
                         pc <= pc + 4;
                     end
