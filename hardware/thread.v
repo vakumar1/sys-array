@@ -24,23 +24,43 @@ module thread
 
         // writing to UART: data signals
         output [7:0] write_data,
-        output write_data_valid
+        output write_data_valid,
 
+        // sysarray ctrl: load signals
+        output [BITWIDTH-1:0] B_addr,
+        output load_lock_req,
+        input load_lock_res,
+        input load_finished,
+
+        // sysarray ctrl: comp signals
+        output comp_lock_req,
+        input comp_lock_res
     );
 
     // instructions
     localparam
-        TERMINATE = 2'b00,
-        WRITE = 2'b01;
+        TERMINATE                       = 2'b00,
+        WRITE                           = 2'b01,
+        LOAD                            = 2'b10,
+        COMP                            = 2'b11;
 
     // state
     localparam
-        THREAD_DONE = 4'd0,
-        THREAD_READ_INST = 4'd1,
-        THREAD_WRITE_LOCK = 4'd2,
-        THREAD_WRITE_BYTECOUNT = 4'd3,
-        THREAD_WRITE_HEADER = 4'd4,
-        THREAD_WRITE_DATA = 4'd5;
+        THREAD_DONE                     = 4'd0,
+        THREAD_READ_INST                = 4'd1,
+
+        // WRITE instr.
+        THREAD_WRITE_ACQ_LOCK           = 4'd2,
+        THREAD_WRITE_BYTECOUNT          = 4'd3,
+        THREAD_WRITE_HEADER             = 4'd4,
+        THREAD_WRITE_DATA               = 4'd5,
+        THREAD_WRITE_REL_LOCK           = 4'd6,
+
+        // LOAD instr.
+        THREAD_LOAD_ACQ_LOCK            = 4'd7,
+        THREAD_LOAD_WAIT                = 4'd8,
+        THREAD_LOAD_REL_LOCK            = 4'd9;
+    
     reg [3:0] thread_state;
 
     // PC - stores current instruction counter
@@ -67,6 +87,16 @@ module thread
     assign bmem_addr = write_bmem_addr;
     assign write_data = write_data_buf;
     assign write_data_valid = write_data_valid_buf;
+
+    // LOAD instruction: signals + data
+    // synchronization signals
+    reg load_lock_req_buf;
+    assign load_lock_req = load_lock_req_buf;
+
+    // addrs
+    reg [BITWIDTH-1:0] B_addr_buf;
+    assign B_addr = B_addr_buf;
+
     always @(posedge clock) begin
         if (reset) begin
             thread_state <= THREAD_DONE;
@@ -96,7 +126,7 @@ module thread
                             end
                             WRITE: begin
                                 // start WRITE instruction (get bmem addr to write from)
-                                thread_state <= THREAD_WRITE_LOCK;
+                                thread_state <= THREAD_WRITE_ACQ_LOCK;
                                 write_header <= imem_data[17:10];
                                 write_bmem_addr <= {24'b0, imem_data[9:2]} << 8;
 
@@ -104,6 +134,14 @@ module thread
                                 // + initialize byte counter to read bmem data on next tick
                                 write_lock_req_buf <= 1;
                                 write_byte_ctr <= 0;
+                            end
+                            LOAD: begin
+                                // start LOAD instruction ()
+                                thread_state <= THREAD_LOAD_ACQ_LOCK;
+                                B_addr_buf <= {24'b0, imem_data[9:2]} << 8;
+
+                                // send load lock req signal
+                                load_lock_req_buf <= 1;
                             end
                         endcase
                     end
@@ -120,7 +158,7 @@ module thread
                 //    
                 // |32 -- 18|17 -- 10|9 --   2|1 --   0|
                 // 
-                THREAD_WRITE_LOCK: begin
+                THREAD_WRITE_ACQ_LOCK: begin
                     // request write lock and proceed once acquired
                     if (write_lock_res) begin
                         thread_state <= THREAD_WRITE_BYTECOUNT;
@@ -177,12 +215,9 @@ module thread
                     if (write_ready) begin
                         // complete bmem word write
                         if (write_bmem_idx_ctr == BLOCK_SIZE) begin
+                            thread_state <= THREAD_WRITE_REL_LOCK;
                             write_lock_req_buf <= 0;
                             write_data_valid_buf <= 0;
-                            if (~write_lock_res) begin
-                                pc <= pc + 4;
-                                thread_state <= THREAD_READ_INST;
-                            end
                         end
 
                         // write a byte from bmem data to UART
@@ -197,7 +232,39 @@ module thread
                         write_data_valid_buf <= 0;
                     end
                 end
+                THREAD_WRITE_REL_LOCK: begin
+                    if (~write_lock_res) begin
+                        thread_state <= THREAD_READ_INST;
+                        pc <= pc + 4;
+                    end
+                end
 
+                // LOAD instruction: submits B_addr to sys array ctrl
+                // and synchronously waits until load completes
+                //
+                // |unused  |B_addr  |code    |
+                // |(22)    |(8)     |(2)     |   
+                //    
+                // |32 -- 10|9 --   2|1 --   0|
+                //
+                THREAD_LOAD_ACQ_LOCK: begin
+                    // request load lock and proceed once acquired
+                    if (load_lock_res) begin
+                        thread_state <= THREAD_LOAD_WAIT;
+                    end
+                end
+                THREAD_LOAD_WAIT: begin
+                    if (load_finished) begin
+                        thread_state <= THREAD_LOAD_REL_LOCK;
+                        load_lock_req_buf <= 0;
+                    end
+                end
+                THREAD_LOAD_REL_LOCK: begin
+                    if (~load_lock_res) begin
+                        thread_state <= THREAD_READ_INST;
+                        pc <= pc + 4;
+                    end
+                end
             endcase
         end
     end
