@@ -1,5 +1,5 @@
-#include "matrix_state.h"
-#include "utils.h"
+#include "utils/matrix_utils.h"
+#include "utils/test_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -237,14 +237,16 @@ int main(int argc, char** argv) {
         expected_Cs.push_back(expected_C);
     }
 
-
-    void test_runner(VerilatedVcdC* tfp, std::string test_header, std::string test_name, std::function<void()> test);
-
     char matmul_test_name[100];
     sprintf(matmul_test_name, "MULTI MATMUL: num_mats=%d height=%d rand=%d id=%d aff=%d neg=%d",
             num_mats, height, random, identity, affine, negative);
     test_runner(tfp, "[SYS ARRAY]", matmul_test_name, 
-            [&tickcount, &tb, &tfp, num_mats, c_rows_s, &As, &Bs, &Ds, &expected_Cs](){ multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs); });
+        [&tickcount, &tb, &tfp, num_mats, c_rows_s, &As, &Bs, &Ds, &expected_Cs](){ 
+            multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs); 
+        },
+        [&tfp](){
+            tfp->close();
+        });
     printf("All tests passed\n");
     tfp->close();
     return 0;

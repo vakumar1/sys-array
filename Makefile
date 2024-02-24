@@ -20,7 +20,8 @@ CORE_VERI_FILES = $(BUILD_DIR)/Vcore__ALL.a
 
 # SIMULATION BUILD RESULT PARAMS (must include source files, dependencies, and verilator build files)
 # utils
-UTIL_SRC_FILES = software/test/uart_util.cpp software/test/utils.cpp $(UART_VERI_FILES)
+UTIL_SRC_FILES = software/test/utils/test_utils.cpp software/test/utils/core_utils.cpp software/test/utils/matrix_utils.cpp \
+					software/test/utils/uart_utils.cpp $(UART_VERI_FILES)
 
 # fifo tests
 FIFO_HARDWARE_FILES = hardware/comms/fifo.v
@@ -29,17 +30,17 @@ FIFO_SIM_FILE = fifo_simulation
 
 # uart tests
 UART_HARDWARE_FILES = hardware/comms/uart.v hardware/comms/uart_tx.v hardware/comms/uart_rx.v
-UART_SRC_FILES = software/test/uart_test.cpp $(UTIL_SRC_FILES) $(UART_VERI_FILES)
+UART_SRC_FILES = software/test/uart_test.cpp $(UTIL_SRC_FILES)
 UART_SIM_FILE = uart_simulation
 
 # uart controller tests
 UART_CTRL_HARDWARE_FILES = hardware/comms/uart_controller.v $(UART_HARDWARE_FILES) $(FIFO_HARDWARE_FILES)
-UART_CTRL_SRC_FILES = software/test/uart_ctrl_test.cpp $(UTIL_SRC_FILES) $(UART_CTRL_VERI_FILES) $(UART_VERI_FILES)
+UART_CTRL_SRC_FILES = software/test/uart_ctrl_test.cpp $(UTIL_SRC_FILES) $(UART_CTRL_VERI_FILES)
 UART_CTRL_SIM_FILE = uart_controller_simulation
 
 # sys array tests
 ARRAY_HARDWARE_FILES = hardware/sys_array.v
-ARRAY_SRC_FILES = software/src/matrix_state.cpp software/test/sysarray_test.cpp $(UTIL_SRC_FILES) $(ARR_VERI_FILES)
+ARRAY_SRC_FILES = software/test/sysarray_test.cpp $(UTIL_SRC_FILES) $(ARR_VERI_FILES)
 ARRAY_SIM_FILE = sysarray_simulation
 
 # sys array controller tests
@@ -55,7 +56,7 @@ TILECOLS = 2
 
 # thread tests
 THREAD_HARDWARE_FILES = hardware/thread.v
-THREAD_SRC_FILES = software/test/thread_test.cpp $(UTIL_SRC_FILES) $(UART_VERI_FILES) $(THREAD_VERI_FILES)
+THREAD_SRC_FILES = software/test/thread_test.cpp $(UTIL_SRC_FILES) $(THREAD_VERI_FILES)
 THREAD_SIM_FILE = thread_simulation
 
 # core tests

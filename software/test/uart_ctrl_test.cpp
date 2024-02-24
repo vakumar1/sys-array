@@ -1,5 +1,5 @@
-#include "utils.h"
-#include "uart_util.h"
+#include "utils/test_utils.h"
+#include "utils/uart_utils.h"
 
 #include "Vuart_controller.h"
 #include "verilated.h"
@@ -146,11 +146,28 @@ int main(int argc, char** argv) {
 
     init(tickcount, tb, tfp);
 
-    test_runner(tfp, "[UART CTRL]", "Write lock acquire",   [&tickcount, &tb, &tfp](){ test_write_lock_acq(tickcount, tb, tfp);});
-    test_runner(tfp, "[UART CTRL]", "UART write",           [&tickcount, &tb, &tfp](){ test_write_byte(tickcount, tb, tfp, 0x2A, 1);});
-    test_runner(tfp, "[UART CTRL]", "UART read",            [&tickcount, &tb, &tfp](){ test_read_bytes(tickcount, tb, tfp, 5);});
+    test_runner("[UART CTRL]", "Write lock acquire",
+        [&tickcount, &tb, &tfp](){ 
+            test_write_lock_acq(tickcount, tb, tfp);
+        },
+        [&tfp](){
+            tfp->close();
+        });
+    test_runner("[UART CTRL]", "UART write",
+        [&tickcount, &tb, &tfp](){ 
+            test_write_byte(tickcount, tb, tfp, 0x2A, 1);
+        },
+        [&tfp](){
+            tfp->close();
+        });
+    test_runner("[UART CTRL]", "UART read",
+        [&tickcount, &tb, &tfp](){ 
+            test_read_bytes(tickcount, tb, tfp, 5);
+        },
+        [&tfp](){
+            tfp->close();
+        });
     printf("All tests passed\n");
     tfp->close();
     return 0;
-
 }

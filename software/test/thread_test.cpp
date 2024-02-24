@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "utils/test_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -376,7 +376,7 @@ int main(int argc, char** argv) {
     tfp->open("thread.vcd");
 
     init(tickcount, tb, tfp);
-    test_runner(tfp, "[THREAD]", "TERM", 
+    test_runner("[THREAD]", "TERM", 
         [&tb, &tfp, &tickcount](){
             instr_t term_inst;
             term_inst.type = TERM;
@@ -386,10 +386,13 @@ int main(int argc, char** argv) {
             instructions.push_back(term_inst);
 
             run_cmds(tb, tfp, tickcount, instructions);
+        },
+        [&tfp](){
+            tfp->close();
         });
 
     init(tickcount, tb, tfp);
-    test_runner(tfp, "[THREAD]", "WRITES + TERM", 
+    test_runner("[THREAD]", "WRITES + TERM", 
         [&tb, &tfp, &tickcount](){
             instr_t term_inst;
             term_inst.type = TERM;
@@ -406,10 +409,13 @@ int main(int argc, char** argv) {
             instructions.push_back(term_inst);
 
             run_cmds(tb, tfp, tickcount, instructions);
+        },
+        [&tfp](){
+            tfp->close();
         });
 
     init(tickcount, tb, tfp);
-    test_runner(tfp, "[THREAD]", "WRITES/LOADS/COMPS + TERM", 
+    test_runner("[THREAD]", "WRITES/LOADS/COMPS + TERM", 
         [&tb, &tfp, &tickcount](){
             instr_t term_inst;
             term_inst.type = TERM;
@@ -442,9 +448,12 @@ int main(int argc, char** argv) {
             instructions.push_back(term_inst);
 
             run_cmds(tb, tfp, tickcount, instructions);
+        },
+        [&tfp](){
+            tfp->close();
         });
 
-
+    tfp->close();
     printf("All tests passed\n");
     return 0;
 }

@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "utils/test_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -467,16 +467,19 @@ int main(int argc, char** argv) {
     init(tickcount, tb, tfp);
 
     // TEST 1: single-threaded load, single-threaded comp
-    test_runner(tfp, "[SYS ARRAY CTRL]", "ST LOAD + ST COMP", 
+    test_runner("[SYS ARRAY CTRL]", "ST LOAD + ST COMP", 
         [&tickcount, &tb, &tfp, &B0, &A, &D, &C, &expected_C0](){
             double_load_req_conflict(tickcount, tb, tfp);
             complete_load(tickcount, tb, tfp, 0, B0);
             double_comp_req_conflict(tickcount, tb, tfp);
             complete_comp(tickcount, tb, tfp, 0, A, D, C, expected_C0);
+        },
+        [&tfp](){
+            tfp->close();
         });
 
     // TEST 2: two single-threaded loads, two single-threaded comps
-    test_runner(tfp, "[SYS ARRAY CTRL]", "ST LOAD + ST LOAD + ST COMP", 
+    test_runner("[SYS ARRAY CTRL]", "ST LOAD + ST LOAD + ST COMP", 
         [&tickcount, &tb, &tfp, &B0, &B1, &A, &D, &C, &expected_C0, &expected_C1](){
             single_load_req(tickcount, tb, tfp, 0);
             complete_load(tickcount, tb, tfp, 0, B0);
@@ -486,10 +489,13 @@ int main(int argc, char** argv) {
             complete_comp(tickcount, tb, tfp, 0, A, D, C, expected_C0);
             single_comp_req(tickcount, tb, tfp, 1);
             complete_comp(tickcount, tb, tfp, 1, A, D, C, expected_C1);
+        },
+        [&tfp](){
+            tfp->close();
         });
 
     // TEST 3: single-threaded load, double-threaded comp + load, single-threaded comp
-    test_runner(tfp, "[SYS ARRAY CTRL]", "ST LOAD + DT COMP/LOAD + ST COMP", 
+    test_runner("[SYS ARRAY CTRL]", "ST LOAD + DT COMP/LOAD + ST COMP", 
         [&tickcount, &tb, &tfp, &B0, &B1, &A, &D, &C, &expected_C0, &expected_C1](){
             single_load_req(tickcount, tb, tfp, 0);
             complete_load(tickcount, tb, tfp, 0, B0);
@@ -497,6 +503,9 @@ int main(int argc, char** argv) {
             complete_load_and_comp(tickcount, tb, tfp, 1, B1, A, D, C, expected_C0);
             single_comp_req(tickcount, tb, tfp, 1);
             complete_comp(tickcount, tb, tfp, 1, A, D, C, expected_C1);
+        },
+        [&tfp](){
+            tfp->close();
         });
     printf("All tests passed\n");
     tfp->close();

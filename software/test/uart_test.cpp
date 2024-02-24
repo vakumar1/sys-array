@@ -1,5 +1,5 @@
-#include "utils.h"
-#include "uart_util.h"
+#include "utils/test_utils.h"
+#include "utils/uart_utils.h"
 
 #include "Vuart.h"
 #include "verilated.h"

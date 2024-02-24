@@ -16,4 +16,4 @@ void data_err(std::string var, char expected, char actual);
 void condition_err(std::string condition_msg, std::function<bool()> condition);
 
 // graceful test runner
-void test_runner(VerilatedVcdC* tfp, std::string test_header, std::string test_name, std::function<void()> test);
+void test_runner(std::string test_header, std::string test_name, std::function<void()> test, std::function<void()> error_hook);

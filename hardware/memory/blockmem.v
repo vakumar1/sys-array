@@ -7,6 +7,7 @@ module blockmem
         input reset,
 
         // MEMORY READ SIGNALS
+        // array
         input [BITWIDTH-1:0] A_tile_read_addrs [MESHUNITS-1:0],
         input [BITWIDTH-1:0] D_tile_read_addrs [MESHUNITS-1:0],
         input [BITWIDTH-1:0] B_tile_read_addrs [MESHUNITS-1:0],
@@ -16,6 +17,10 @@ module blockmem
         output signed [BITWIDTH-1:0] A [MESHUNITS-1:0][TILEUNITS-1:0],
         output signed [BITWIDTH-1:0] D [MESHUNITS-1:0][TILEUNITS-1:0],
         output signed [BITWIDTH-1:0] B [MESHUNITS-1:0][TILEUNITS-1:0],
+
+        // thread
+        input [BITWIDTH-1:0] thread0_read_addr,
+        output signed [BITWIDTH-1:0] thread0_read_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0],
 
         // MEMORY WRITE SIGNALS
         // array

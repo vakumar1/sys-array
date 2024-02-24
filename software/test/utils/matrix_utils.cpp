@@ -1,4 +1,4 @@
-#include "matrix_state.h"
+#include "utils/matrix_utils.h"
 
 #include "verilated.h"
 

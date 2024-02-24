@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "utils/test_utils.h"
 
 #include <stdexcept>
 #include <string>
@@ -37,7 +37,7 @@ void condition_err(std::string condition_msg, std::function<bool()> condition) {
     throw std::runtime_error(msg);
 }
 
-void test_runner(VerilatedVcdC* tfp, std::string test_header, std::string test_name, std::function<void()> test) {
+void test_runner(std::string test_header, std::string test_name, std::function<void()> test, std::function<void()> error_hook) {
     try
     {
         printf((test_header + " - " + test_name + "\n").c_str());
@@ -47,7 +47,7 @@ void test_runner(VerilatedVcdC* tfp, std::string test_header, std::string test_n
     {
         printf(e.what());
         printf("\n");
-        tfp->close();
+        error_hook();
         exit(0);
     }
 };

@@ -32,9 +32,6 @@ module core
     reg [BITWIDTH-1:0] loader_addr_buffer;
     reg [BITWIDTH-1:0] loader_imem_data_buffer;
     reg [BITWIDTH-1:0] loader_bmem_data_buffer [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0];
-    reg thread0_running;
-    reg thread1_running;
-    reg thread2_running;
     always @(posedge clock) begin
         // default invalidate all loader write signals
         write_valid_bmem <= 0;
@@ -141,11 +138,6 @@ module core
         end
     end
 
-    // THREADS
-    wire thread0_idx = 0;
-    wire thread1_idx = thread0_running ? 1 : 0;
-    wire thread2_idx = (thread0_running | thread1_running) ? 1 : 0;
-
     // SYS ARRAY
     // COMP LOGIC SIGNALS <-> THREADS
     reg comp_lock_req [1:0];
@@ -172,7 +164,7 @@ module core
     wire D_read_valid [MESHUNITS-1:0];
     wire B_read_valid [MESHUNITS-1:0];
 
-    // ARRAY WRITE SINGALS <-> BMEM
+    // ARRAY WRITE SIGNALS <-> BMEM
     wire [BITWIDTH-1:0] C [MESHUNITS-1:0][TILEUNITS-1:0];
     wire [BITWIDTH-1:0] C_col_write_addrs [MESHUNITS-1:0];
     wire C_write_valid [MESHUNITS-1:0];
@@ -231,6 +223,10 @@ module core
         .D(D),
         .B(B),
 
+        // THREAD -> BMEM READ
+        .thread0_read_addr(thread0_bmem_addr),
+        .thread0_read_data(thread0_bmem_data),
+
         // ARRAY -> BMEM WRITE
         .C_tile_write_addrs(C_col_write_addrs),
         .C_write_valid(C_write_valid),
@@ -243,19 +239,22 @@ module core
     );
 
     reg write_valid_imem0;
+    reg [BITWIDTH-1:0] read_addr0_1;
+    reg [BITWIDTH-1:0] read_instr0_1;
     imem #(IMEM_ADDRSIZE, BITWIDTH)
     _imem0 (
         .clock(clock),
         .reset(reset),
-        .read_addr1(),
+        .read_addr1(read_addr0_1),
         .read_addr2(),
-        .read_instr1(),
+        .read_instr1(read_instr0_1),
         .read_instr2(),
         .write_addr(loader_addr_buffer),
         .write_data(loader_imem_data_buffer),
         .write_valid(write_valid_imem0)
     );
 
+    // TODO: associate IMEM with separate thread or remove
     reg write_valid_imem1;
     imem #(IMEM_ADDRSIZE, BITWIDTH)
     _imem1 (
@@ -270,6 +269,7 @@ module core
         .write_valid(write_valid_imem1)
     );
 
+    // TODO: associate IMEM with separate thread or remove
     reg write_valid_imem2;
     imem #(IMEM_ADDRSIZE, BITWIDTH)
     _imem2 (
@@ -309,6 +309,66 @@ module core
         .serial_in(serial_in),
         .serial_out(serial_out)
     );
+
+    // THREADS
+    wire thread0_idx = 0;
+    wire thread1_idx = thread0_running ? 1 : 0;
+    wire thread2_idx = (thread0_running | thread1_running) ? 1 : 0;
+    reg thread0_running;
+    reg thread1_running;
+    reg thread2_running;
+
+    reg [BITWIDTH-1:0] thread0_bmem_addr;
+    reg [BITWIDTH-1:0] thread0_bmem_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0];
+    reg [BITWIDTH-1:0] thread0_B_addr;
+    reg [BITWIDTH-1:0] thread0_A_addr;
+    reg [BITWIDTH-1:0] thread0_D_addr;
+    reg [BITWIDTH-1:0] thread0_C_addr;
+    thread #(BITWIDTH, MESHUNITS, TILEUNITS)
+    _thread0 (
+        // CONTROL SIGNALS
+        .clock(clock),
+        .reset(reset),
+        .running(thread0_running),
+        .idx(thread0_idx),
+        .idle(),
+
+        // MEM READ/WRITE SIGNALS
+        .imem_addr(read_addr0_1),
+        .imem_data(read_instr0_1),
+        .bmem_addr(thread0_bmem_addr),
+        .bmem_data(thread0_bmem_data),
+
+        // UART
+        .write_lock_req(write_lock_req[0]),
+        .write_lock_res(write_lock_res[0]),
+        .write_ready(write_ready),
+        .write_data(write_data[0]),
+        .write_data_valid(write_data_valid[0]),
+
+        // SYSARRAY LOAD
+        .B_addr(thread0_B_addr),
+        .load_lock_req(load_lock_req[0]),
+        .load_lock_res(load_lock_res[0]),
+        .load_finished(load_finished),
+
+        // SYSARRAY COMP
+        .A_addr(thread0_A_addr),
+        .D_addr(thread0_D_addr),
+        .C_addr(thread0_C_addr),
+        .comp_lock_req(comp_lock_req[0]),
+        .comp_lock_res(comp_lock_res[0]),
+        .comp_finished(comp_finished)
+    );
+
+    // TODO: add separate thread that writes to UART[1] signals
+    assign write_lock_req[1] = 0;
+    assign write_data[1] = 0;
+    assign write_data_valid[1] = 0;
+
+    // TODO: add separate thread that writes to LOAD/COMP_LOCK[1] signals
+    assign load_lock_req[1] = 0;
+    assign comp_lock_req[1] = 0;
     
 
 endmodule
