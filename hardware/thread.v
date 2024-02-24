@@ -169,7 +169,10 @@ module thread
                                 thread_state <= THREAD_COMP_ACQ_LOCK;
                                 A_addr_buf <= {24'b0, imem_data[9:2]} << 8;
                                 D_addr_buf <= {24'b0, imem_data[17:10]} << 8;
-                                C_addr_buf <= {24'b0, imem_data[25:18]} << 8;                                
+                                C_addr_buf <= {24'b0, imem_data[25:18]} << 8;   
+                                
+                                // send comp lock req signal
+                                comp_lock_req_buf <= 1;
                             end
                         endcase
                     end
