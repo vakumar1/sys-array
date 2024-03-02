@@ -84,7 +84,7 @@ module uart_controller
     reg uart_write_ready;
     reg [7:0] uart_data_in;
     reg uart_data_in_valid;
-    assign write_ready = uart_write_ready;
+    assign write_ready = ~write_fifo_full;
 
     // UART read signals
     reg [7:0] uart_data_out;

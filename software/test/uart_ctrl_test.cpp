@@ -61,12 +61,13 @@ int test_write_byte(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, ch
     signal_err("uartctrl->write_ready", 1, tb->write_ready);
     tick(tickcount, tb, tfp);
 
-    // wait until uart starts reading
-    int i = 0;
-    while (tb->write_ready) {
-        i++;
+    // wait until uart starts writing out
+    for (int i = 0; ; i++) {
+        if (tb->serial_out == 0) {
+            break;
+        }
         tick(tickcount, tb, tfp);
-        condition_err("UART read ready timeout", [i](){ return i >= SYMBOL_TICK_COUNT; });
+        condition_err("UART read ready timeout", i >= SYMBOL_TICK_COUNT);
     }
     tb->data_in_valid[index] = 0;
 
@@ -82,7 +83,6 @@ int test_write_byte(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, ch
         for (int j = 0; j < SYMBOL_TICK_COUNT; j++) {
             tick(tickcount, tb, tfp);
             signal_err("tb->serial_out", last_bit, tb->serial_out);
-            signal_err("tb->write_ready", 0, tb->write_ready);
         }
     }
     
@@ -93,7 +93,8 @@ int test_write_byte(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, ch
     }
 
     // end with write ready again
-    signal_err("tb->write_ready", 0, tb->write_ready);
+    tick(tickcount, tb, tfp);
+    signal_err("tb->serial_out", 1, tb->serial_out);
     return SUCCESS;
 
 }
