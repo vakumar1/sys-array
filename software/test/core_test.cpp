@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     test_runner("[CORE]", "IMEM/BMEM STORE", 
         [&core, &tfp, &core_tickcount, &driver_uart, &driver_tfp, &driver_tickcount](){
             // halt all threads
-            std::array<bool, 3> init_update = {0};
+            std::array<bool, 4> init_update = { 0 };
             thread_update(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, init_update);
 
             // send random imem data
@@ -59,7 +59,6 @@ int main(int argc, char** argv) {
     test_runner("[CORE]", "IMEM/BMEM STORE + WRITES", 
         [&core, &tfp, &core_tickcount, &driver_uart, &driver_tfp, &driver_tickcount](){
             std::array<bool, 4> update;
-
 
             // halt all threads
             update = { 0 };

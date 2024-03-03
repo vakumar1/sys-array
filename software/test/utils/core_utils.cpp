@@ -236,6 +236,7 @@ int read_bmem(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_t
     }
 
     // read header
+    expected_byte = header;
     actual_byte = read_byte(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp);
     sprintf(signal_msg, "write - header");
     data_err(signal_msg, expected_byte, actual_byte);
