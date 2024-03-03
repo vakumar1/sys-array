@@ -30,8 +30,8 @@ void data_err(std::string var, char expected, char actual) {
     throw std::runtime_error(msg);
 }
 
-void condition_err(std::string condition_msg, std::function<bool()> condition) {
-    if (!condition())
+void condition_err(std::string condition_msg, bool condition) {
+    if (!condition)
         return;
     std:: string msg = "[condition=" + condition_msg + "] not met";
     throw std::runtime_error(msg);

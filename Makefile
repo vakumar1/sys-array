@@ -20,8 +20,9 @@ CORE_VERI_FILES = $(BUILD_DIR)/Vcore__ALL.a
 
 # SIMULATION BUILD RESULT PARAMS (must include source files, dependencies, and verilator build files)
 # utils
-UTIL_SRC_FILES = software/test/utils/test_utils.cpp software/test/utils/core_utils.cpp software/test/utils/matrix_utils.cpp \
+UTIL_SRC_FILES = software/test/utils/test_utils.cpp software/test/utils/matrix_utils.cpp software/test/utils/instr_utils.cpp \
 					software/test/utils/uart_utils.cpp $(UART_VERI_FILES)
+CORE_UTIL_SRC_FILES = software/test/utils/core_utils.cpp $(CORE_VERI_FILES)
 
 # fifo tests
 FIFO_HARDWARE_FILES = hardware/comms/fifo.v
@@ -61,10 +62,10 @@ THREAD_SIM_FILE = thread_simulation
 
 # core tests
 CORE_HARDWARE_FILES = hardware/core.v hardware/thread.v hardware/memory/blockmem.v hardware/memory/imem.v $(ARR_CTRL_HARDWARE_FILES) $(UART_CTRL_HARDWARE_FILES)
-CORE_SRC_FILES = software/test/core_test.cpp $(UTIL_SRC_FILES) $(CORE_VERI_FILES)
+CORE_SRC_FILES = software/test/core_test.cpp $(UTIL_SRC_FILES) $(CORE_UTIL_SRC_FILES) $(CORE_VERI_FILES)
 CORE_SIM_FILE = core_simulation
 IMEM_ADDR_SIZE = 256 # 1 << 8
-BMEM_ADDR_SIZE = 256 # 1 << 16
+BMEM_ADDR_SIZE = 65536 # 1 << 16
 
 ## TARGETS
 
@@ -127,7 +128,7 @@ veri-thread:
 veri-core: veri-uart
 	verilator -Wno-style \
 	-GBITWIDTH=$(BITWIDTH) -GIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) -GBMEM_ADDRSIZE=$(BMEM_ADDR_SIZE) -GMESHUNITS=$(MESHROWS) -GTILEUNITS=$(TILEROWS) \
-	--trace --trace-max-width 1024 $(VINC)/verilated_fst_c.cpp -cc $(CORE_HARDWARE_FILES)
+	--trace --trace-max-width 1024 --trace-depth 25 -cc $(CORE_HARDWARE_FILES)
 	cd $(BUILD_DIR); \
 	make -f Vcore.mk;
 

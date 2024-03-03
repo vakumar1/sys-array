@@ -42,12 +42,19 @@ module blockmem
     reg signed [BITWIDTH-1:0] A_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
     reg signed [BITWIDTH-1:0] D_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
     reg signed [BITWIDTH-1:0] B_buffer [MESHUNITS-1:0][TILEUNITS-1:0];
+    assign A = A_buffer;
+    assign D = D_buffer;
+    assign B = B_buffer;
+
+    // thread
+    reg signed [BITWIDTH-1:0] thread0_buffer [BLOCK_SIZE - 1:0];
+    assign thread0_read_data = thread0_buffer;
 
     // loader
     localparam BLOCK_SIZE = MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS;
 
     always @(*) begin
-        integer i, j;
+        integer i, j, k;
 
         // array addrs + reads
         for (i = 0; i < MESHUNITS; i++) begin
@@ -57,11 +64,13 @@ module blockmem
                 B_buffer[i][j] = block_mem[((B_tile_read_addrs[i] >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + j];
             end
         end
+
+        // thread reads
+        for (k = 0; k < BLOCK_SIZE; k++) begin
+            thread0_buffer[k] = block_mem[((thread0_read_addr >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + k];
+        end
     end
 
-    assign A = A_buffer;
-    assign D = D_buffer;
-    assign B = B_buffer;
 
     always @(posedge clock) begin
         if (reset) begin

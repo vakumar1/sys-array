@@ -1,4 +1,5 @@
 #include "utils/test_utils.h"
+#include "utils/instr_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,72 +23,6 @@
 #endif
 
 #define BLOCKSIZE (MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS)
-
-//
-// INSTRUCTION DATA TYPES
-//
-
-#define TERM_CODE 0b00
-#define WRITE_CODE 0b01
-#define LOAD_CODE 0b10
-#define COMP_CODE 0b11
-
-enum instr_type {
-    TERM,
-    WRITE,
-    LOAD,
-    COMP
-};
-
-// TERM instr.
-typedef struct {} 
-term_instr_t;
-
-unsigned int term_instr_to_bits(term_instr_t t) {
-    return TERM_CODE;
-}
-
-// WRITE instr.
-typedef struct {
-    unsigned char header;
-    unsigned char bmem_addr;
-} write_instr_t;
-
-unsigned int write_instr_to_bits(write_instr_t w) {
-    return 0 | (w.header << 10) | (w.bmem_addr << 2) | (WRITE_CODE);
-} 
-
-// LOAD instr.
-typedef struct {
-    unsigned char b_addr;
-} load_instr_t;
-
-unsigned int load_instr_to_bits(load_instr_t l) {
-    return 0 | (l.b_addr << 2) | (LOAD_CODE);
-}
-
-// COMP instr.
-typedef struct {
-    unsigned char a_addr;
-    unsigned char d_addr;
-    unsigned char c_addr;
-} comp_instr_t;
-
-unsigned int comp_instr_to_bits(comp_instr_t c) {
-    return 0 | (c.c_addr << 18) | (c.d_addr << 10) | (c.a_addr << 2) | (COMP_CODE);
-}
-
-// instr. wrapper
-typedef struct {
-    instr_type type;
-    union {
-        term_instr_t t;
-        write_instr_t w;
-        load_instr_t l;
-        comp_instr_t c;
-    } inner_instr;
-} instr_t;
-
 
 void tick(int& tickcount, Vthread* tb, VerilatedVcdC* tfp) {
     tb->eval();
@@ -122,7 +57,7 @@ void run_term_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int 
     unsigned int actual_imem_addr = tb->imem_addr;
     char err_msg[100];
     sprintf(err_msg, "Incorrect imem addr: expected=%d actual=%d", imem_addr, actual_imem_addr);
-    condition_err(err_msg, [&imem_addr, &actual_imem_addr](){ return imem_addr != actual_imem_addr; });
+    condition_err(err_msg, imem_addr != actual_imem_addr);
     tb->imem_data = term_instr_to_bits(t);
 
     // verify thread returns to THREAD_DONE state
@@ -148,7 +83,7 @@ void run_write_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int
     unsigned int actual_imem_addr = tb->imem_addr;
     char err_msg[100];
     sprintf(err_msg, "Incorrect imem addr: expected=%d actual=%d", imem_addr, actual_imem_addr);
-    condition_err(err_msg, [imem_addr, actual_imem_addr](){ return imem_addr != actual_imem_addr; });
+    condition_err(err_msg, imem_addr != actual_imem_addr);
     tb->imem_data = write_instr_to_bits(w);
 
     // verify thread starts in THREAD_READ_INST state
@@ -165,8 +100,7 @@ void run_write_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int
     unsigned int actual_bmem_addr = tb->bmem_addr;
     unsigned int expected_bmem_addr = w.bmem_addr << 8;
     sprintf(err_msg, "Incorrect bmem addr: expected=%d actual=%d", expected_bmem_addr, actual_imem_addr);
-    condition_err(err_msg, [expected_bmem_addr, actual_bmem_addr](){ return expected_bmem_addr != actual_bmem_addr; });
-    // data_err("tb->write_bmem_addr", w.bmem_addr << 8, tb->bmem_addr);
+    condition_err(err_msg, expected_bmem_addr != actual_bmem_addr);
     tb->write_lock_res = 1;
     for (int i = 0; i < BLOCKSIZE; i++) {
         tb->bmem_data[i] = data[i];
@@ -231,7 +165,7 @@ void run_write_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int
     signal_err("tb->write_data_valid", 0, tb->write_data_valid);
     actual_imem_addr = tb->imem_addr;
     sprintf(err_msg, "Incorrect next imem addr: expected=%d actual=%d", imem_addr + 4, actual_imem_addr);
-    condition_err(err_msg, [&imem_addr, &actual_imem_addr](){ return imem_addr + 4 != actual_imem_addr; });
+    condition_err(err_msg, imem_addr + 4 != actual_imem_addr);
 }
 
 void run_load_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int imem_addr, load_instr_t l) {
@@ -239,7 +173,7 @@ void run_load_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int 
     unsigned int actual_imem_addr = tb->imem_addr;
     char err_msg[100];
     sprintf(err_msg, "Incorrect imem addr: expected=%d actual=%d", imem_addr, actual_imem_addr);
-    condition_err(err_msg, [imem_addr, actual_imem_addr](){ return imem_addr != actual_imem_addr; });
+    condition_err(err_msg, imem_addr != actual_imem_addr);
     tb->imem_data = load_instr_to_bits(l);
 
     // verify thread starts in THREAD_READ_INST state
@@ -280,7 +214,7 @@ void run_load_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int 
     signal_err("tb->idle", 0, tb->idle);
     actual_imem_addr = tb->imem_addr;
     sprintf(err_msg, "Incorrect next imem addr: expected=%d actual=%d", imem_addr + 4, actual_imem_addr);
-    condition_err(err_msg, [&imem_addr, &actual_imem_addr](){ return imem_addr + 4 != actual_imem_addr; });
+    condition_err(err_msg, imem_addr + 4 != actual_imem_addr);
 }
 
 void run_comp_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int imem_addr, comp_instr_t c) {
@@ -288,7 +222,7 @@ void run_comp_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int 
     unsigned int actual_imem_addr = tb->imem_addr;
     char err_msg[100];
     sprintf(err_msg, "Incorrect imem addr: expected=%d actual=%d", imem_addr, actual_imem_addr);
-    condition_err(err_msg, [imem_addr, actual_imem_addr](){ return imem_addr != actual_imem_addr; });
+    condition_err(err_msg, imem_addr != actual_imem_addr);
     tb->imem_data = comp_instr_to_bits(c);
 
     // verify thread starts in THREAD_READ_INST state
@@ -329,19 +263,28 @@ void run_comp_cmd(Vthread* tb, VerilatedVcdC* tfp, int& tickcount, unsigned int 
     signal_err("tb->idle", 0, tb->idle);
     actual_imem_addr = tb->imem_addr;
     sprintf(err_msg, "Incorrect next imem addr: expected=%d actual=%d", imem_addr + 4, actual_imem_addr);
-    condition_err(err_msg, [&imem_addr, &actual_imem_addr](){ return imem_addr + 4 != actual_imem_addr; });
+    condition_err(err_msg, imem_addr + 4 != actual_imem_addr);
 }
 
 void run_cmds(Vthread* tb, VerilatedVcdC* tfp, int& tickcount,
                 std::vector<instr_t>& instructions) {
-    // enter THREAD_READ_INST state
-    tb->running = 1;
+    // enter THREAD_IDLE state
+    tb->enabled = 1;
     tick(tickcount, tb, tfp);
+    signal_err("tb->idle", 1, tb->idle);
+
+    // enter THREAD_READ_INST state
+    tb->start = 1;
+    tick(tickcount, tb, tfp);
+    signal_err("tb->idle", 0, tb->idle);
+    tb->start = 0;
+
     for (unsigned int i = 0; i < instructions.size(); i++) {
         // force thread into THREAD_READ_INST state after TERM inst.
         if (i > 0 && instructions[i - 1].type == TERM) {
-            tb->running = 1;
+            tb->start = 1;
             tick(tickcount, tb, tfp);
+            tb->start = 0;
         }
 
         unsigned int imem_addr = i * 4;
@@ -363,6 +306,7 @@ void run_cmds(Vthread* tb, VerilatedVcdC* tfp, int& tickcount,
                 break;
         }
     }
+    tb->enabled = 0;
 }
 
 int main(int argc, char** argv) {

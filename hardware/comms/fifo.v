@@ -15,18 +15,21 @@ module fifo
         output full
     );
 
-    reg [7:0] buffer [BUFFER_SIZE-1:0];
+    reg [7:0] buffer [BUFFER_SIZE-1:0] /*verilator public*/;
     reg [31:0] buffer_start;
     reg [31:0] buffer_count;
-    reg [7:0] last_read;
-    reg last_read_valid;
     wire write_successful = write && buffer_count < BUFFER_SIZE;
     wire read_successful = read && buffer_count > 0;
+
+    // reads from buffer data are synchronous
+    assign data_out = buffer[buffer_start];
+    assign data_out_valid = read_successful;
+
+    // writes to buffer data + updates to buffer counter are asynchronous
     always @(posedge clock) begin
         if (reset) begin
             buffer_start <= 0;
             buffer_count <= 0;
-            last_read_valid <= 0;
         end
         else begin
             // write iff there is space
@@ -43,11 +46,6 @@ module fifo
                 buffer_start <= buffer_start == BUFFER_SIZE - 1
                                     ? 0
                                     : buffer_start + 1;
-                last_read <= buffer[buffer_start];
-                last_read_valid <= 1;
-            end
-            else begin
-                last_read_valid <= 0;
             end
 
             if (write_successful && !read_successful)
@@ -56,8 +54,6 @@ module fifo
                 buffer_count <= buffer_count - 1;
         end
     end
-    assign data_out = last_read;
-    assign data_out_valid = last_read_valid;
     assign empty = buffer_count == 0;
     assign full = buffer_count == BUFFER_SIZE;
 endmodule

@@ -21,6 +21,25 @@ void tick(int& tickcount, Vfifo* tb, VerilatedVcdC* tfp) {
     tickcount++;
 }
 
+void tick_and_store_read(int& tickcount, Vfifo* tb, VerilatedVcdC* tfp, unsigned char& data, int& data_valid) {
+    tb->eval();
+    data = tb->data_out;
+    data_valid = tb->data_out_valid;
+    if (tickcount > 0) {
+        if (tfp)
+            tfp->dump(tickcount * 10 - 2);
+    }
+    tb->clock = 1;
+    tb->eval();
+    if (tfp)
+        tfp->dump(tickcount * 10);
+    tb->clock = 0;
+    tb->eval();
+    if (tfp)
+        tfp->dump(tickcount * 10 + 5);
+    tickcount++;
+}
+
 int fill_and_empty_test(Vfifo* fifo, VerilatedVcdC* tfp) {
     int tickcount = 0;
     
@@ -59,16 +78,17 @@ int fill_and_empty_test(Vfifo* fifo, VerilatedVcdC* tfp) {
     tick(tickcount, fifo, tfp);
 
     // remove data until empty
+    unsigned char data;
+    int data_valid;
     for (int i = 0; i < 256; i++) {
-        char expected_data = static_cast<char>(i);
+        unsigned char expected_data = static_cast<char>(i);
         if (fifo->empty) {
             return SIM_ERROR;
         }
         fifo->write = 0;
         fifo->read = 1;
-        tick(tickcount, fifo, tfp);
-        char res = fifo->data_out;
-        if (!fifo->data_out_valid || res != expected_data) {
+        tick_and_store_read(tickcount, fifo, tfp, data, data_valid);
+        if (!data_valid || data != expected_data) {
             return SIM_ERROR;
         }
     }

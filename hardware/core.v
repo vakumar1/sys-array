@@ -37,16 +37,21 @@ module core
         write_valid_bmem <= 0;
         write_valid_imem0 <= 0;
         write_valid_imem1 <= 0;
-        write_valid_imem2 <= 0;
 
         if (reset) begin
             // -> LOADER START
             loader_state <= LOADER_START;
-            thread0_running <= 0;
-            thread1_running <= 0;
-            thread2_running <= 0;
+            thread0_start <= 0;
+            thread0_enabled <= 0;
+            thread1_start <= 0;
+            thread1_enabled <= 0;
         end
         else begin
+            // thread start signal defaults to 0
+            // unless an actual update is received
+            thread0_start <= 0;
+            thread1_start <= 0;
+
             if (read_data_valid) begin
                 /* verilator lint_off CASEINCOMPLETE */
                 case (loader_state)
@@ -71,9 +76,10 @@ module core
                                 // update running threads
                                 // -> LOADER START 
                                 loader_state <= LOADER_START;
-                                thread0_running <= read_data[0];
-                                thread1_running <= read_data[1];
-                                thread2_running <= read_data[2] & ~read_data[0] & ~read_data[1];
+                                thread0_start <= read_data[0];
+                                thread0_enabled <= read_data[1];
+                                thread1_start <= read_data[2];
+                                thread1_enabled <= read_data[3];
                             end
                         endcase
                     end
@@ -92,14 +98,11 @@ module core
                         loader_imem_data_buffer[8 * (loader_byte_ctr) +: 8] <= read_data;
                         if (loader_byte_ctr == (BITWIDTH >> 3) - 1) begin
                             // write imem data
-                            if (~thread0_running) begin
+                            if (~thread0_enabled) begin
                                 write_valid_imem0 <= 1;
                             end
-                            else if (~thread1_running) begin
+                            else if (~thread1_enabled) begin
                                 write_valid_imem1 <= 1;
-                            end
-                            else if (~thread2_running) begin
-                                write_valid_imem2 <= 1;
                             end
 
                             // -> START
@@ -269,21 +272,6 @@ module core
         .write_valid(write_valid_imem1)
     );
 
-    // TODO: associate IMEM with separate thread or remove
-    reg write_valid_imem2;
-    imem #(IMEM_ADDRSIZE, BITWIDTH)
-    _imem2 (
-        .clock(clock),
-        .reset(reset),
-        .read_addr1(),
-        .read_addr2(),
-        .read_instr1(),
-        .read_instr2(),
-        .write_addr(loader_addr_buffer),
-        .write_data(loader_imem_data_buffer),
-        .write_valid(write_valid_imem2)
-    );
-
     // UART: write sync + signals
     reg write_lock_req [1:0];
     reg write_lock_res [1:0];
@@ -311,12 +299,10 @@ module core
     );
 
     // THREADS
-    wire thread0_idx = 0;
-    wire thread1_idx = thread0_running ? 1 : 0;
-    wire thread2_idx = (thread0_running | thread1_running) ? 1 : 0;
-    reg thread0_running;
-    reg thread1_running;
-    reg thread2_running;
+    reg thread0_start;
+    reg thread0_enabled;
+    reg thread1_start;
+    reg thread1_enabled;
 
     reg [BITWIDTH-1:0] thread0_bmem_addr;
     reg [BITWIDTH-1:0] thread0_bmem_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0];
@@ -329,8 +315,9 @@ module core
         // CONTROL SIGNALS
         .clock(clock),
         .reset(reset),
-        .running(thread0_running),
-        .idx(thread0_idx),
+        .start(thread0_start),
+        .enabled(thread0_enabled),
+        .idx(0),
         .idle(),
 
         // MEM READ/WRITE SIGNALS

@@ -27,7 +27,7 @@ module uart
 
     // share tx_running between transmitter/receiver
     // to stop receiver when transmitter is running
-    wire tx_running;
+    wire tx_running /*verilator public*/;
     assign tx_ready = ~tx_running;
 
     uart_transmitter #(SYMBOL_EDGE_TIME)

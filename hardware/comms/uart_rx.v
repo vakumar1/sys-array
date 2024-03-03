@@ -22,7 +22,7 @@ module uart_receiver
     reg [31:0] tick_ctr;
     reg [1:0] state;
     reg [2:0] bit_pos;
-    reg [7:0] buffer;
+    reg [7:0] buffer /*verilator public*/;
     always @(posedge clock) begin
         if (reset) begin
             state <= WAITING;

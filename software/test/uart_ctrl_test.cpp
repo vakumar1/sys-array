@@ -28,6 +28,25 @@ void tick(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp) {
     tickcount++;
 }
 
+void tick_and_store_read(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, unsigned char& data, int& data_valid) {
+    tb->eval();
+    data = tb->data_out;
+    data_valid = tb->data_out_valid;
+    if (tickcount > 0) {
+        if (tfp)
+            tfp->dump(tickcount * 10 - 2);
+    }
+    tb->clock = 1;
+    tb->eval();
+    if (tfp)
+        tfp->dump(tickcount * 10);
+    tb->clock = 0;
+    tb->eval();
+    if (tfp)
+        tfp->dump(tickcount * 10 + 5);
+    tickcount++;
+}
+
 void init(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp) {
     tb->reset = 1;
     tick(tickcount, tb, tfp);
@@ -58,8 +77,10 @@ int test_write_lock_acq(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp
 int test_write_byte(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, char data, int index) {
     tb->data_in[index] = data;
     tb->data_in_valid[index] = 1;
+    tb->data_in_valid[1 - index] = 0;
     signal_err("uartctrl->write_ready", 1, tb->write_ready);
     tick(tickcount, tb, tfp);
+    tb->data_in_valid[index] = 0;
 
     // wait until uart starts writing out
     for (int i = 0; ; i++) {
@@ -69,7 +90,6 @@ int test_write_byte(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, ch
         tick(tickcount, tb, tfp);
         condition_err("UART read ready timeout", i >= SYMBOL_TICK_COUNT);
     }
-    tb->data_in_valid[index] = 0;
 
     // start bit
     for (int j = 1; j < SYMBOL_TICK_COUNT; j++) {
@@ -105,7 +125,7 @@ int test_read_bytes(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, in
 
     // write bytes to UART (as the "driver")
     for (unsigned int i = 0; i < byte_count; i++) {
-        unsigned char data = static_cast<unsigned char>(i + 1);
+        unsigned char data = (unsigned char) (i + 1);
         for (int j = 0; j < SYMBOL_TICK_COUNT; j++) {
             tick(tickcount, tb, tfp);
             tb->serial_in = 0;
@@ -124,13 +144,15 @@ int test_read_bytes(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp, in
     }
 
     // read bytes from UART (as the controller through FIFO)
+    unsigned char data;
+    int data_valid;
     for (unsigned int i = 0; i < byte_count; i++) {
         tb->read_valid = 1;
-        tick(tickcount, tb, tfp);
-        signal_err("tb->data_out_valid", 1, tb->data_out_valid);
+        tick_and_store_read(tickcount, tb, tfp, data, data_valid);
+        signal_err("tb->data_out_valid", 1, data_valid);
 
-        unsigned int data = static_cast<unsigned int>(tb->data_out);
-        data_err("tb->data_out", i + 1, data);
+        unsigned char expected_data = (unsigned char) (i + 1);
+        data_err("tb->data_out", expected_data, data);
     }
     return SUCCESS;
 }

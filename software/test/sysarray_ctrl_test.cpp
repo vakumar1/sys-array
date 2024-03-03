@@ -196,8 +196,7 @@ int complete_load(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
             // block of address previously provided to sys array loader
             int mesh_addr = tb->B_col_read_addrs[i];
             sprintf(err_msg, "Invalid B mesh addr: expected (within) %d, actual=%d", addr, mesh_addr);
-            condition_err(err_msg,
-                [mesh_addr, addr](){ return mesh_addr < addr || mesh_addr >= addr + MATSIZE; });
+            condition_err(err_msg, mesh_addr < addr || mesh_addr >= addr + MATSIZE);
 
             // mock memory responds to memory request with the 
             // corresponding word in B
@@ -213,15 +212,13 @@ int complete_load(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
         if (tb->load_finished) {
             break;
         }
-        condition_err("Timed out waiting for load to complete",
-            [cycle_count, max_cycle_count](){ return cycle_count >= max_cycle_count; });
+        condition_err("Timed out waiting for load to complete", cycle_count >= max_cycle_count);
     }
 
     // assert the total load took MESHUNITS * (TILEUNITS + 1) cycles
     // see `sys_array_controller.v` for calculation of total cycles
     sprintf(err_msg, "Incorrect load cycles: expected=%d, actual=%d", MESHUNITS * (TILEUNITS + 1), cycle_count);
-    condition_err(err_msg,
-        [cycle_count](){ return cycle_count != MESHUNITS * (TILEUNITS + 1); });
+    condition_err(err_msg, return cycle_count != MESHUNITS * (TILEUNITS + 1));
     
     tick(tickcount, tb, tfp);
     signal_err("tb->load_lock_res", 0, tb->load_lock_res[index]);
@@ -245,8 +242,7 @@ int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
                 // block of address previously provided to sys array loader
                 int A_mesh_addr = tb->A_row_read_addrs[i];
                 sprintf(err_msg, "Invalid A mesh addr: expected (within) %d, actual=%d", a_addr, A_mesh_addr);
-                condition_err(err_msg,
-                    [A_mesh_addr, a_addr](){ return A_mesh_addr < a_addr && A_mesh_addr >= a_addr + MATSIZE; });
+                condition_err(err_msg, A_mesh_addr < a_addr && A_mesh_addr >= a_addr + MATSIZE);
 
                 // mock memory responds to memory request with the 
                 // corresponding word in A
@@ -262,8 +258,7 @@ int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
                 // block of address previously provided to sys array loader
                 int D_mesh_addr = tb->D_col_read_addrs[i];
                 sprintf(err_msg, "Invalid D mesh addr: expected (within) %d, actual=%d", d_addr, D_mesh_addr);
-                condition_err(err_msg,
-                    [D_mesh_addr, d_addr](){ return D_mesh_addr < d_addr && D_mesh_addr >= d_addr + MATSIZE; });
+                condition_err(err_msg, D_mesh_addr < d_addr && D_mesh_addr >= d_addr + MATSIZE);
 
                 // mock memory responds to memory request with the 
                 // corresponding word in D
@@ -280,8 +275,7 @@ int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
         if (tb->comp_finished) {
             break;
         }
-        condition_err("Timed out waiting for comp to complete",
-            [cycle_count, max_cycle_count](){ return cycle_count >= max_cycle_count; });
+        condition_err("Timed out waiting for comp to complete", cycle_count >= max_cycle_count);
 
         
         for (int i = 0; i < MESHUNITS; i++) {
@@ -294,8 +288,7 @@ int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
             // block of address previously provided to sys array loader
             int C_mesh_addr = tb->C_col_write_addrs[i];
             sprintf(err_msg, "Invalid C mesh addr: expected (within) %d, actual=%d", c_addr, C_mesh_addr);
-            condition_err(err_msg,
-                [C_mesh_addr, c_addr](){ return C_mesh_addr < c_addr && C_mesh_addr >= c_addr + MATSIZE; });
+            condition_err(err_msg, C_mesh_addr < c_addr && C_mesh_addr >= c_addr + MATSIZE);
             
             // mock memory records the word written to the C address
             // by the sys array controller
@@ -310,8 +303,7 @@ int complete_comp(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
     // assert the total comp took MESHUNITS * (TILEUNITS + 2) cycles
     // see `sys_array_controller.v` for calculation of total cycles
     sprintf(err_msg, "Incorrect comp cycles: expected=%d, actual=%d", MESHUNITS * (TILEUNITS + 2), cycle_count);
-    condition_err(err_msg,
-        [cycle_count](){ return cycle_count != MESHUNITS * (TILEUNITS + 2) - 1; });
+    condition_err(err_msg, cycle_count != MESHUNITS * (TILEUNITS + 2) - 1);
 
     // assert sys array writes the correct values to C in mock memory
     for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
@@ -349,8 +341,7 @@ int complete_load_and_comp(int& tickcount, Vsys_array_controller* tb, VerilatedV
             if (tb->A_read_valid[i]) {
                 int A_mesh_addr = tb->A_row_read_addrs[i];
                 sprintf(err_msg, "Invalid A mesh addr: expected (within) %d, actual=%d", a_addr, A_mesh_addr);
-                condition_err(err_msg,
-                    [A_mesh_addr, a_addr](){ return A_mesh_addr < a_addr && A_mesh_addr >= a_addr + MATSIZE; });
+                condition_err(err_msg, A_mesh_addr < a_addr && A_mesh_addr >= a_addr + MATSIZE);
                 int A_row = (A_mesh_addr - a_addr) / (MESHUNITS * TILEUNITS);
                 int A_col = (A_mesh_addr - a_addr) % (MESHUNITS * TILEUNITS);
                 for (int j = 0; j < TILEUNITS; j++) {
@@ -360,8 +351,7 @@ int complete_load_and_comp(int& tickcount, Vsys_array_controller* tb, VerilatedV
             if (tb->D_read_valid[i]) {
                 int D_mesh_addr = tb->D_col_read_addrs[i];
                 sprintf(err_msg, "Invalid D mesh addr: expected (within) %d, actual=%d", d_addr, D_mesh_addr);
-                condition_err(err_msg,
-                    [D_mesh_addr, d_addr](){ return D_mesh_addr < d_addr && D_mesh_addr >= d_addr + MATSIZE; });
+                condition_err(err_msg, D_mesh_addr < d_addr && D_mesh_addr >= d_addr + MATSIZE);
                 int D_row = (D_mesh_addr - d_addr) / (MESHUNITS * TILEUNITS);
                 int D_col = (D_mesh_addr - d_addr) % (MESHUNITS * TILEUNITS);
                 for (int j = 0; j < TILEUNITS; j++) {
@@ -371,8 +361,7 @@ int complete_load_and_comp(int& tickcount, Vsys_array_controller* tb, VerilatedV
             if (tb->B_read_valid[i]) {
                 int mesh_addr = tb->B_col_read_addrs[i];
                 sprintf(err_msg, "Invalid B mesh addr: expected (within) %d, actual=%d", b_addr, mesh_addr);
-                condition_err(err_msg,
-                    [mesh_addr, b_addr](){ return mesh_addr < b_addr && mesh_addr >= b_addr + MATSIZE; });
+                condition_err(err_msg, mesh_addr < b_addr && mesh_addr >= b_addr + MATSIZE);
                 int row = (mesh_addr - b_addr) / (MESHUNITS * TILEUNITS);
                 int col = (mesh_addr - b_addr) % (MESHUNITS * TILEUNITS);
                 for (int j = 0; j < TILEUNITS; j++) {
@@ -391,8 +380,7 @@ int complete_load_and_comp(int& tickcount, Vsys_array_controller* tb, VerilatedV
         if (comp_finished && load_finished) {
             break;
         }
-        condition_err("Timed out waiting for load/comp to complete",
-            [cycle_count, max_cycle_count](){ return cycle_count >= max_cycle_count; });
+        condition_err("Timed out waiting for load/comp to complete", cycle_count >= max_cycle_count);
 
         // i. verify address requested by sys array controller for output matrix (C) is expected
         // ii. store output word 
@@ -402,8 +390,7 @@ int complete_load_and_comp(int& tickcount, Vsys_array_controller* tb, VerilatedV
             }
             int C_mesh_addr = tb->C_col_write_addrs[i];
             sprintf(err_msg, "Invalid B mesh addr: expected (within) %d, actual=%d", c_addr, C_mesh_addr);
-            condition_err(err_msg,
-                [C_mesh_addr, c_addr](){ return C_mesh_addr < c_addr && C_mesh_addr >= c_addr + MATSIZE; });
+            condition_err(err_msg, C_mesh_addr < c_addr && C_mesh_addr >= c_addr + MATSIZE);
             int C_row = (C_mesh_addr - c_addr) / (MESHUNITS * TILEUNITS);
             int C_col = (C_mesh_addr - c_addr) % (MESHUNITS * TILEUNITS);
             for (int j = 0; j < TILEUNITS; j++) {

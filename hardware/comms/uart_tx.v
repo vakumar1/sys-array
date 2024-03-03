@@ -24,7 +24,7 @@ module uart_transmitter
     // update transmitter state on each symbol edge
     reg [1:0] state;
     reg [2:0] bit_pos;
-    reg [7:0] buffer;
+    reg [7:0] buffer /*verilator public*/;
     always @(posedge clock) begin
         if (reset) begin
             state <= WAITING;

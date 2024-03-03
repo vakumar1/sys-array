@@ -118,7 +118,7 @@ int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mat
 
             // wait until all inputs and outputs are done
             signal_err("c_valid", c_valid, 1);
-            condition_err("Timed out waiting for C output", [waiting_iters](){ return waiting_iters >= 10; });
+            condition_err("Timed out waiting for C output", waiting_iters >= 10);
             if ((b_done && a_done && d_done)) {
                 waiting_iters++;
                 if (c_done) {

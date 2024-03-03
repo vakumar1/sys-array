@@ -5,7 +5,8 @@ module thread
     (
         input clock,
         input reset,
-        input running,
+        input start,
+        input enabled,
         input idx,
         output idle, // UNUSED
 
@@ -50,30 +51,32 @@ module thread
 
     // state
     localparam
-        THREAD_DONE                     = 4'd0,
-        THREAD_READ_INST                = 4'd1,
+        THREAD_DISABLED                 = 4'd0,
+        THREAD_IDLE                     = 4'd1,
+        THREAD_READ_INST                = 4'd2,
 
         // WRITE instr.
-        THREAD_WRITE_ACQ_LOCK           = 4'd2,
-        THREAD_WRITE_BYTECOUNT          = 4'd3,
-        THREAD_WRITE_HEADER             = 4'd4,
-        THREAD_WRITE_DATA               = 4'd5,
-        THREAD_WRITE_REL_LOCK           = 4'd6,
+        THREAD_WRITE_ACQ_LOCK           = 4'd3,
+        THREAD_WRITE_BYTECOUNT          = 4'd4,
+        THREAD_WRITE_HEADER             = 4'd5,
+        THREAD_WRITE_DATA               = 4'd6,
+        THREAD_WRITE_REL_LOCK           = 4'd7,
 
         // LOAD instr.
-        THREAD_LOAD_ACQ_LOCK            = 4'd7,
-        THREAD_LOAD_WAIT                = 4'd8,
-        THREAD_LOAD_REL_LOCK            = 4'd9,
+        THREAD_LOAD_ACQ_LOCK            = 4'd8,
+        THREAD_LOAD_WAIT                = 4'd9,
+        THREAD_LOAD_REL_LOCK            = 4'd10,
 
         // COMP instr.
-        THREAD_COMP_ACQ_LOCK            = 4'd10,
-        THREAD_COMP_WAIT                = 4'd11,
-        THREAD_COMP_REL_LOCK            = 4'd12;
+        THREAD_COMP_ACQ_LOCK            = 4'd11,
+        THREAD_COMP_WAIT                = 4'd12,
+        THREAD_COMP_REL_LOCK            = 4'd13;
     
-    reg [3:0] thread_state;
+    reg [3:0] thread_state /*verilator public*/;
 
     // PC - stores current instruction counter
     reg [BITWIDTH-1:0] pc;
+    reg pc_reset_received;
     assign imem_addr = pc;
         
     // WRITE instruction: signals + data
@@ -120,30 +123,44 @@ module thread
 
     always @(posedge clock) begin
         if (reset) begin
-            thread_state <= THREAD_DONE;
+            thread_state <= THREAD_IDLE;
             write_lock_req_buf <= 0;
             write_data_buf <= 0;
             write_data_valid_buf <= 0;
             pc <= 0;
+            pc_reset_received <= 0;
         end
         else begin
+            // accumulator for whether a start signal was received
+            // used on next PC set
+            pc_reset_received <= pc_reset_received | start;
+
             /* verilator lint_off CASEINCOMPLETE */
             case (thread_state)
-                THREAD_DONE: begin
-                    if (running) begin
+                THREAD_DISABLED: begin
+                    if (enabled) begin
+                        thread_state <= THREAD_IDLE;
+                    end
+                end
+                THREAD_IDLE: begin
+                    if (~enabled) begin
+                        thread_state <= THREAD_DISABLED;
+                    end
+                    else if (pc_reset_received | start) begin
                         thread_state <= THREAD_READ_INST;
                         pc <= 0;
+                        pc_reset_received <= 0;
                     end
                 end
                 THREAD_READ_INST: begin
-                    if (~running) begin
-                        thread_state <= THREAD_DONE;
+                    if (~enabled) begin
+                        thread_state <= THREAD_DISABLED;
                     end
                     else begin
                         /* verilator lint_off CASEINCOMPLETE */
                         case (imem_data[1:0])
                             TERMINATE: begin
-                                thread_state <= THREAD_DONE;
+                                thread_state <= THREAD_IDLE;
                             end
                             WRITE: begin
                                 // start WRITE instruction (get bmem addr to write from)
@@ -266,7 +283,8 @@ module thread
                 THREAD_WRITE_REL_LOCK: begin
                     if (~write_lock_res) begin
                         thread_state <= THREAD_READ_INST;
-                        pc <= pc + 4;
+                        pc <= pc_reset_received | start ? 0 : pc + 4;
+                        pc_reset_received <= 0;
                     end
                 end
 
@@ -293,7 +311,8 @@ module thread
                 THREAD_LOAD_REL_LOCK: begin
                     if (~load_lock_res) begin
                         thread_state <= THREAD_READ_INST;
-                        pc <= pc + 4;
+                        pc <= pc_reset_received | start ? 0 : pc + 4;
+                        pc_reset_received <= 0;
                     end
                 end
 
@@ -320,12 +339,13 @@ module thread
                 THREAD_COMP_REL_LOCK: begin
                     if (~comp_lock_res) begin
                         thread_state <= THREAD_READ_INST;
-                        pc <= pc + 4;
+                        pc <= pc_reset_received | start ? 0 : pc + 4;
+                        pc_reset_received <= 0;
                     end
                 end
             endcase
         end
     end
-    assign idle = thread_state == THREAD_DONE;
+    assign idle = thread_state == THREAD_IDLE;
     
 endmodule
