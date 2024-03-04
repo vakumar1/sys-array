@@ -306,10 +306,6 @@ module core
 
     reg [BITWIDTH-1:0] thread0_bmem_addr;
     reg [BITWIDTH-1:0] thread0_bmem_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0];
-    reg [BITWIDTH-1:0] thread0_B_addr;
-    reg [BITWIDTH-1:0] thread0_A_addr;
-    reg [BITWIDTH-1:0] thread0_D_addr;
-    reg [BITWIDTH-1:0] thread0_C_addr;
     thread #(BITWIDTH, MESHUNITS, TILEUNITS)
     _thread0 (
         // CONTROL SIGNALS
@@ -334,15 +330,15 @@ module core
         .write_data_valid(write_data_valid[0]),
 
         // SYSARRAY LOAD
-        .B_addr(thread0_B_addr),
+        .B_addr(B_addr[0]),
         .load_lock_req(load_lock_req[0]),
         .load_lock_res(load_lock_res[0]),
         .load_finished(load_finished),
 
         // SYSARRAY COMP
-        .A_addr(thread0_A_addr),
-        .D_addr(thread0_D_addr),
-        .C_addr(thread0_C_addr),
+        .A_addr(A_addr[0]),
+        .D_addr(D_addr[0]),
+        .C_addr(C_addr[0]),
         .comp_lock_req(comp_lock_req[0]),
         .comp_lock_res(comp_lock_res[0]),
         .comp_finished(comp_finished)
@@ -356,6 +352,10 @@ module core
     // TODO: add separate thread that writes to LOAD/COMP_LOCK[1] signals
     assign load_lock_req[1] = 0;
     assign comp_lock_req[1] = 0;
+    assign B_addr[1] = 0;
+    assign A_addr[1] = 0;
+    assign D_addr[1] = 0;
+    assign C_addr[1] = 0;
     
 
 endmodule
