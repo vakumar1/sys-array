@@ -218,7 +218,7 @@ int complete_load(int& tickcount, Vsys_array_controller* tb, VerilatedVcdC* tfp,
     // assert the total load took MESHUNITS * (TILEUNITS + 1) cycles
     // see `sys_array_controller.v` for calculation of total cycles
     sprintf(err_msg, "Incorrect load cycles: expected=%d, actual=%d", MESHUNITS * (TILEUNITS + 1), cycle_count);
-    condition_err(err_msg, return cycle_count != MESHUNITS * (TILEUNITS + 1));
+    condition_err(err_msg, cycle_count != MESHUNITS * (TILEUNITS + 1));
     
     tick(tickcount, tb, tfp);
     signal_err("tb->load_lock_res", 0, tb->load_lock_res[index]);

@@ -34,6 +34,7 @@
 // generates update code for threads 0-1
 #define UPDATE_BYTE(T0_start, T0_enabled, T1_start, T1_enabled) UPDATE | (T0_start) | (T0_enabled << 1) | (T1_start << 2) | (T1_enabled << 3)
 
+void core_tick(int& tickcount, Vcore* tb, VerilatedVcdC* tfp, int serial_in);
 void init(int& tickcount, Vcore* tb, VerilatedVcdC* tfp);
 int imem_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp, int& core_tickcount, Vcore* core, VerilatedVcdC* tfp, 
                 int write_imem, unsigned int imem_addr, unsigned int imem_data);

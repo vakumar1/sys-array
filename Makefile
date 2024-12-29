@@ -4,7 +4,7 @@ SVDPIINC = /usr/share/verilator/include/vltstd
 SRC_DIR = software/src/
 TEST_DIR = software/test/
 SIM_COMPILE_CMD = g++ -g -I$(VINC) -I$(SVDPIINC) -I$(BUILD_DIR)/ -I$(SRC_DIR) -I$(TEST_DIR) \
-				$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp \
+				$(VINC)/verilated.cpp $(VINC)/verilated_vcd_c.cpp $(VINC)/verilated_threads.cpp \
 
 
 ## PARAMS
@@ -67,6 +67,10 @@ CORE_SIM_FILE = core_simulation
 IMEM_ADDR_SIZE = 256 # 1 << 8
 BMEM_ADDR_SIZE = 65536 # 1 << 16
 
+# driver
+DRIVER_SRC_FILES = software/src/driver.cpp software/src/virtual_device.cpp $(UTIL_SRC_FILES) $(CORE_UTIL_SRC_FILES) $(CORE_VERI_FILES)
+DRIVER_EXEC_FILE = driver
+
 ## TARGETS
 
 fifo: veri-fifo sim-fifo
@@ -88,13 +92,13 @@ core: veri-core sim-core
 # e.g., build veri-uart when the simulation uses the utils target
 veri-fifo:
 	verilator -Wno-style \
-	--trace -cc $(FIFO_HARDWARE_FILES)
+	--trace --cc $(FIFO_HARDWARE_FILES)
 	cd $(BUILD_DIR); \
 	make -f Vfifo.mk;
 
 veri-uart:
 	verilator -Wno-style \
-	--trace -cc $(UART_HARDWARE_FILES)
+	--trace --cc $(UART_HARDWARE_FILES)
 	cd $(BUILD_DIR); \
 	make -f Vuart.mk;
 
@@ -172,6 +176,12 @@ sim-core:
 	-DIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) -DBMEM_ADDRSIZE=$(BMEM_ADDR_SIZE) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
 	-o $(CORE_SIM_FILE)
 
+# BUILD DRIVER
+driver:
+	$(SIM_COMPILE_CMD) \
+	$(DRIVER_SRC_FILES) \
+	-DIMEM_ADDRSIZE=$(IMEM_ADDR_SIZE) -DBMEM_ADDRSIZE=$(BMEM_ADDR_SIZE) -DMESHUNITS=$(MESHROWS) -DTILEUNITS=$(TILEROWS) \
+	-o $(DRIVER_EXEC_FILE)
 
 # RUN TESTS
 test-array:
@@ -198,3 +208,4 @@ clean:
 	- rm -rf $(BUILD_DIR)
 	- rm *_simulation
 	- rm *.vcd
+	- rm driver

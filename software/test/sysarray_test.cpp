@@ -79,7 +79,7 @@ int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mat
         std::vector<std::vector<int>> D_mat;
 
         int collecting_c_rows = ignore_collecting ? 0 : c_rows[collecting_idx];
-        if (collecting_idx >= 0) {
+        if (!ignore_collecting) {
             A_state = feeding_mat_state(MESHROWS, TILEROWS, collecting_c_rows, true);
             C_state = reading_mat_state(MESHCOLS, TILECOLS, collecting_c_rows, true);
             D_state = feeding_mat_state(MESHCOLS, TILECOLS, collecting_c_rows, true);
@@ -88,7 +88,7 @@ int multi_matmul(int& tickcount, Vsys_array* tb, VerilatedVcdC* tfp, int num_mat
             D_mat = D[collecting_idx];
         }
 
-        if (loading_idx < num_mats) {
+        if (!ignore_loading) {
             B_state = feeding_mat_state(MESHCOLS, TILECOLS, MESHROWS * TILEROWS, false);
             B_mat = B[loading_idx];
         }
@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
     char matmul_test_name[100];
     sprintf(matmul_test_name, "MULTI MATMUL: num_mats=%d height=%d rand=%d id=%d aff=%d neg=%d",
             num_mats, height, random, identity, affine, negative);
-    test_runner(tfp, "[SYS ARRAY]", matmul_test_name, 
+    test_runner("[SYS ARRAY]", matmul_test_name, 
         [&tickcount, &tb, &tfp, num_mats, c_rows_s, &As, &Bs, &Ds, &expected_Cs](){ 
             multi_matmul(tickcount, tb, tfp, num_mats, c_rows_s, As, Bs, Ds, expected_Cs); 
         },

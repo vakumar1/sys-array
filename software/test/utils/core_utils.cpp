@@ -35,6 +35,10 @@ void init(int& tickcount, Vcore* tb, VerilatedVcdC* tfp) {
 // DRIVER WRITE UTILS
 //
 
+void core_tick(int& tickcount, Vcore* tb, VerilatedVcdC* tfp, int serial_in) {
+    tick(tickcount, tb, tfp, serial_in);
+}
+
 void wait_on_final_bit(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp, 
                         int& core_tickcount, Vcore* core, VerilatedVcdC* tfp) {
 
