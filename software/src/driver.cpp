@@ -12,6 +12,18 @@ void driver_log(std::string header, std::string msg) {
     std::cout << "[" + header + "] " + msg << std::endl;
 }
 
+void matrix_log(std::string header, std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS>& data) {
+    for (unsigned i = 0; i < MESHUNITS * TILEUNITS; i++) {
+        std::string line("");
+        for (unsigned j = 0; j < MESHUNITS * TILEUNITS; j++) {
+            line += std::to_string(data[i * MESHUNITS * TILEUNITS + j]);
+            line += " ";
+        }
+        line = "[ " + line + " ]";
+        driver_log(header, line);
+    }
+}
+
 typedef struct {
     std::unordered_map<std::string, unsigned int> data_addresses;
     std::unordered_map<std::string, std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS>> data;
@@ -92,6 +104,7 @@ void parse_data(std::string input,
                 data_map[curr_name] = arr;
                 curr_matrix.clear();
                 driver_log(DATA_HEADER, std::string("Added matrix=" + curr_name));
+                matrix_log(DATA_HEADER, arr);
             }
         }
     }
@@ -161,7 +174,6 @@ void parse_text(std::string input,
         }
         inst_count += 1;
     }
-    driver_log(TEXT_HEADER, std::string("Added " + std::to_string(inst_count) + " instructions."));
 }
 
 
@@ -199,26 +211,7 @@ script_t parse_script(std::string input) {
     return { address_map, data_map, inst_list };
 }
 
-int main(int argc, char** argv) {    
-
-    // parse script
-    std::vector<std::string> files;
-    for (int i = 1; i < argc; i++) {
-        files.push_back(std::string(argv[i]));
-    }
-    if (files.size() != 1) {
-        throw std::runtime_error("Provide exactly 1 input file");
-    }
-
-    // setup virtual device
-    Verilated::commandArgs(argc, argv);
-    Vcore* core = new Vcore;
-    Vuart* driver_uart = new Vuart;
-    Verilated::traceEverOn(true);
-    virtual_device* device = new virtual_device;
-    device->init_device(driver_uart, core);
-
-    std::string file_path = files.at(0);
+void run_script(std::string file_path, virtual_device* device) {
     std::ifstream file(file_path, std::ios::in | std::ios::binary);
     if (!file) {
         throw std::ios_base::failure("Error opening file");
@@ -231,6 +224,8 @@ int main(int argc, char** argv) {
         std::string matrix_name = pair.first;
         unsigned int address = pair.second;
         device->block_store(address, script.data[matrix_name]);
+        driver_log(std::string("LOAD_BMEM"), std::string("ADDRESS: ") + print_hex_int(address));
+        matrix_log(std::string("LOAD_BMEM"), script.data[matrix_name]);
     }
 
     // store imem data
@@ -253,6 +248,7 @@ int main(int argc, char** argv) {
             default:
                 throw std::runtime_error("Unaccepted instruction type");
         }
+        driver_log(std::string("LOAD_IMEM"), print_hex_int(imem_addr) + std::string(" ") + print_instr(instr));
         device->imem_store(imem_addr, imem_data);
         imem_addr += 0x4;
     }
@@ -262,15 +258,33 @@ int main(int argc, char** argv) {
     device->thread_update(update);
     unsigned char header;
     std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS> data;
-    while (true) {
-        device->read_bmem(header, data);
-        driver_log(std::string("READ_BMEM"), std::string("HEADER: ") + std::to_string(header));
-        for (int i = 0; i < data.size(); i++) {
-            driver_log(std::string("READ_BMEM"), std::string("DATA: ") 
-                + std::to_string(i) 
-                + std::string(" ") 
-                + std::to_string(data[i]));
-        }
+    device->read_bmem(header, data);
+    driver_log(std::string("READ_BMEM"), std::string("HEADER: ") + std::to_string(header));
+    matrix_log(std::string("READ_BMEM"), data);
+    update = {0, 0, 0, 0};
+    device->thread_update(update);
+
+}
+
+int main(int argc, char** argv) {    
+
+    // parse script
+    std::vector<std::string> files;
+    for (int i = 1; i < argc; i++) {
+        files.push_back(std::string(argv[i]));
     }
 
+    // setup virtual device
+    Verilated::commandArgs(argc, argv);
+    Vcore* core = new Vcore;
+    Vuart* driver_uart = new Vuart;
+    Verilated::traceEverOn(true);
+    virtual_device* device = new virtual_device;
+    device->init_device(driver_uart, core);
+
+    for (std::string file_path : files) {
+        driver_log(std::string("DRIVER"), std::string("Running script: ") + file_path);
+        run_script(file_path, device);
+    }
+    driver_log(std::string("DRIVER"), std::string("Finished running scripts - exiting"));
 }

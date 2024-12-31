@@ -1,9 +1,5 @@
 #include "virtual_device.h"
 
-void device_log(std::string header, std::string msg) {
-    std::cout << "[" + header + "] " + msg << std::endl;
-}
-
 void reading_state_t::init_reading_state() {
     this->running = false;
     this->curr_reading_byte_state = 0x0;
@@ -133,20 +129,14 @@ void virtual_device::read_bmem(unsigned char& header, std::array<int, MESHUNITS 
     for (int i = 0; i < 4; i++) {
         byte_count = byte_count | (curr_bytes.at(i) << (i * 8));
     }
-    device_log(std::string("READ_BMEM"), std::string("READ BYTE COUNT: ") + std::to_string(byte_count));
     if (byte_count != 1 + 4 * bmem_data.size()) {
         throw std::runtime_error("Unexpected byte count received from device - expected " + std::to_string(1 + bmem_data.size()));
     }
     this->clear_read_bytes(4);
     
     // wait until all header + data bytes are sent
-    int i = 0;
     while (this->get_read_bytes_count() < byte_count) {
         this->virtual_device_tick();
-        if (i % ((unsigned int) 1e6) == 0) {
-            device_log(std::string("READ_BMEM"), std::to_string(i) + std::string(" CURR READ BYTE COUNT: ") + std::to_string(this->get_read_bytes_count()));
-        }
-        i++;
     }
 
     // decode header + data bytes and clear read bytes

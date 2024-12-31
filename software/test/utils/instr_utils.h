@@ -2,6 +2,10 @@
 // INSTRUCTION DATA TYPES
 //
 
+#include <string>
+#include <iomanip>
+#include <sstream>
+
 #define TERM_CODE 0b00
 #define WRITE_CODE 0b01
 #define LOAD_CODE 0b10
@@ -54,3 +58,7 @@ typedef struct {
         comp_instr_t c;
     } inner_instr;
 } instr_t;
+
+std::string print_hex_int(unsigned int i);
+std::string print_hex_char(unsigned char c);
+std::string print_instr(instr_t instr);
