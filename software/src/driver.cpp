@@ -86,6 +86,7 @@ void parse_data(std::string input,
             curr_matrix.push_back(val);
             if (curr_matrix.size() == MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) {
                 parsing_name = true;
+                parsing_address = true;
                 std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS> arr = {0};
                 std::copy(curr_matrix.begin(), curr_matrix.end(), arr.begin());
                 data_map[curr_name] = arr;
@@ -144,7 +145,17 @@ void parse_text(std::string input,
             inst_list.push_back(inst);
             index += 2;
         } else if (subtokens[index] == COMP_INST) {
-            throw std::runtime_error("Unrecognized instruction " + subtokens[index]);
+            if (index + 4 > subtokens.size()) {
+                throw std::runtime_error("TEXT section has incomplete instruction");
+            }
+            unsigned char a_addr = (unsigned char) (((std::stoi(subtokens[index + 1], nullptr, 16)) >> 8) & 0xFF);
+            unsigned char d_addr = (unsigned char) (((std::stoi(subtokens[index + 2], nullptr, 16)) >> 8) & 0xFF);
+            unsigned char c_addr = (unsigned char) (((std::stoi(subtokens[index + 3], nullptr, 16)) >> 8) & 0xFF);
+            instr_t inst;
+            inst.type = COMP;
+            inst.inner_instr.c = { a_addr, d_addr, c_addr };
+            inst_list.push_back(inst);
+            index += 4;
         } else {
             throw std::runtime_error("Unrecognized instruction " + subtokens[index]);
         }
