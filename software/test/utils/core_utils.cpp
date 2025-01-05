@@ -136,12 +136,11 @@ int imem_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
 
     // check that imem was correctly stored
     wait_on_final_bit(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp);
-    Vcore_imem__A100_B20* imem = core->core->_imem0;
-    // write_imem == 0 ? core->core->_imem0
-    //                             : write_imem == 1 ? core->core->_imem1
-    //                             : core->core->_imem2;
+    Vcore_imem__A100_B20* imem = write_imem == 0
+        ? core->core->_imem0
+        : core->core->_imem1;
     unsigned int actual_imem_data = imem->instr_mem[(imem_addr >> 2) & (IMEM_ADDRSIZE - 1)];
-    data_err("IMEM[" + std::to_string((imem_addr >> 2) & (IMEM_ADDRSIZE - 1)) + "]", imem_data, actual_imem_data);
+    data_err("IMEM[" + std::to_string(write_imem) + "][" + std::to_string((imem_addr >> 2) & (IMEM_ADDRSIZE - 1)) + "]", imem_data, actual_imem_data);
     return SUCCESS;
 }
 

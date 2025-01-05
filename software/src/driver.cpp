@@ -27,7 +27,8 @@ void matrix_log(std::string header, std::array<int, MESHUNITS * MESHUNITS * TILE
 typedef struct {
     std::unordered_map<std::string, unsigned int> data_addresses;
     std::unordered_map<std::string, std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS>> data;
-    std::vector<instr_t> instructions;
+    std::vector<instr_t> instructions_0;
+    std::vector<instr_t> instructions_1;
 } script_t;
 
 #define SECTION_DELIMITER std::string("===")
@@ -195,7 +196,8 @@ script_t parse_script(std::string input) {
     unsigned int text_section_count = 0;
     std::unordered_map<std::string, unsigned int> address_map;
     std::unordered_map<std::string, std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS>> data_map;
-    std::vector<instr_t> inst_list;
+    std::vector<instr_t> inst_list_0;
+    std::vector<instr_t> inst_list_1;
     for (std::string section : sections) {
         if (section.compare(0, META_HEADER.size(), META_HEADER) == 0) {
             parse_meta(section);
@@ -204,33 +206,22 @@ script_t parse_script(std::string input) {
             parse_data(section, address_map, data_map);
             data_section_count++;
         } else if (section.compare(0, TEXT_HEADER.size(), TEXT_HEADER) == 0) {
-            parse_text(section, inst_list);
+            if (text_section_count == 0) {
+                parse_text(section, inst_list_0);
+            } else if (text_section_count == 1) {
+                parse_text(section, inst_list_1);
+            } else {
+                throw std::ios_base::failure("At most 2 TEXT sections permitted per script");
+            }
             text_section_count++;
         }
     }
-    return { address_map, data_map, inst_list };
+    return { address_map, data_map, inst_list_0, inst_list_1 };
 }
 
-void run_script(std::string file_path, virtual_device* device) {
-    std::ifstream file(file_path, std::ios::in | std::ios::binary);
-    if (!file) {
-        throw std::ios_base::failure("Error opening file");
-    }
-    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    script_t script = parse_script(content);
-
-    // store bmem data
-    for (const auto& pair : script.data_addresses) {
-        std::string matrix_name = pair.first;
-        unsigned int address = pair.second;
-        device->block_store(address, script.data[matrix_name]);
-        driver_log(std::string("LOAD_BMEM"), std::string("ADDRESS: ") + print_hex_int(address));
-        matrix_log(std::string("LOAD_BMEM"), script.data[matrix_name]);
-    }
-
-    // store imem data
+void store_imem_data(virtual_device* device, script_t script, bool thread_0_instructions) {
     unsigned int imem_addr = 0x0;
-    for (instr_t instr : script.instructions) {
+    for (instr_t instr : thread_0_instructions ? script.instructions_0 : script.instructions_1) {
         unsigned int imem_data;
         switch (instr.type) {
             case TERM:
@@ -252,18 +243,52 @@ void run_script(std::string file_path, virtual_device* device) {
         device->imem_store(imem_addr, imem_data);
         imem_addr += 0x4;
     }
+}
 
-    // start thread and wait forever
-    std::array<bool, 4> update = {1, 1, 0, 0};
+void run_script(std::string file_path, virtual_device* device) {
+    std::ifstream file(file_path, std::ios::in | std::ios::binary);
+    if (!file) {
+        throw std::ios_base::failure("Error opening file");
+    }
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    script_t script = parse_script(content);
+    std::array<bool, 4> update;
+
+    // store bmem data
+    for (const auto& pair : script.data_addresses) {
+        std::string matrix_name = pair.first;
+        unsigned int address = pair.second;
+        device->block_store(address, script.data[matrix_name]);
+        driver_log(std::string("LOAD_BMEM"), std::string("ADDRESS: ") + print_hex_int(address));
+        matrix_log(std::string("LOAD_BMEM"), script.data[matrix_name]);
+    }
+
+    // store thread 0 imem data and start thread
+    store_imem_data(device, script, true);
+    update = {1, 1, 0, 0};
     device->thread_update(update);
+
+    // store thread 1 imem data (if present) and start thread
+    if (!script.instructions_1.empty()) {
+        store_imem_data(device, script, false);
+        update = {0, 1, 1, 1};
+        device->thread_update(update);
+    }
+    
+
+    // wait until matrices written to UART - then kill threads
     unsigned char header;
     std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS> data;
     device->read_bmem(header, data);
     driver_log(std::string("READ_BMEM"), std::string("HEADER: ") + std::to_string(header));
     matrix_log(std::string("READ_BMEM"), data);
+    if (!script.instructions_1.empty()) {
+        device->read_bmem(header, data);
+        driver_log(std::string("READ_BMEM"), std::string("HEADER: ") + std::to_string(header));
+        matrix_log(std::string("READ_BMEM"), data);
+    }
     update = {0, 0, 0, 0};
     device->thread_update(update);
-
 }
 
 int main(int argc, char** argv) {    

@@ -259,13 +259,15 @@ module core
 
     // TODO: associate IMEM with separate thread or remove
     reg write_valid_imem1;
+    reg [BITWIDTH-1:0] read_addr1_1;
+    reg [BITWIDTH-1:0] read_instr1_1;
     imem #(IMEM_ADDRSIZE, BITWIDTH)
     _imem1 (
         .clock(clock),
         .reset(reset),
-        .read_addr1(),
+        .read_addr1(read_addr1_1),
         .read_addr2(),
-        .read_instr1(),
+        .read_instr1(read_instr1_1),
         .read_instr2(),
         .write_addr(loader_addr_buffer),
         .write_data(loader_imem_data_buffer),
@@ -344,18 +346,45 @@ module core
         .comp_finished(comp_finished)
     );
 
-    // TODO: add separate thread that writes to UART[1] signals
-    assign write_lock_req[1] = 0;
-    assign write_data[1] = 0;
-    assign write_data_valid[1] = 0;
+    reg [BITWIDTH-1:0] thread1_bmem_addr;
+    reg [BITWIDTH-1:0] thread1_bmem_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0];
+    thread #(BITWIDTH, MESHUNITS, TILEUNITS)
+    _thread1 (
+        // CONTROL SIGNALS
+        .clock(clock),
+        .reset(reset),
+        .start(thread1_start),
+        .enabled(thread1_enabled),
+        .idx(1),
+        .idle(),
 
-    // TODO: add separate thread that writes to LOAD/COMP_LOCK[1] signals
-    assign load_lock_req[1] = 0;
-    assign comp_lock_req[1] = 0;
-    assign B_addr[1] = 0;
-    assign A_addr[1] = 0;
-    assign D_addr[1] = 0;
-    assign C_addr[1] = 0;
+        // MEM READ/WRITE SIGNALS
+        .imem_addr(read_addr1_1),
+        .imem_data(read_instr1_1),
+        .bmem_addr(thread1_bmem_addr),
+        .bmem_data(thread1_bmem_data),
+
+        // UART
+        .write_lock_req(write_lock_req[1]),
+        .write_lock_res(write_lock_res[1]),
+        .write_ready(write_ready),
+        .write_data(write_data[1]),
+        .write_data_valid(write_data_valid[1]),
+
+        // SYSARRAY LOAD
+        .B_addr(B_addr[1]),
+        .load_lock_req(load_lock_req[1]),
+        .load_lock_res(load_lock_res[1]),
+        .load_finished(load_finished),
+
+        // SYSARRAY COMP
+        .A_addr(A_addr[1]),
+        .D_addr(D_addr[1]),
+        .C_addr(C_addr[1]),
+        .comp_lock_req(comp_lock_req[1]),
+        .comp_lock_res(comp_lock_res[1]),
+        .comp_finished(comp_finished)
+    );
     
 
 endmodule
