@@ -8,7 +8,9 @@ module core
         input reset,
 
         input serial_in,
-        output serial_out
+        output serial_out,
+        input cts,
+        output rts
     );
 
     // loader state
@@ -229,6 +231,8 @@ module core
         // THREAD -> BMEM READ
         .thread0_read_addr(thread0_bmem_addr),
         .thread0_read_data(thread0_bmem_data),
+        .thread1_read_addr(thread1_bmem_addr),
+        .thread1_read_data(thread1_bmem_data),
 
         // ARRAY -> BMEM WRITE
         .C_tile_write_addrs(C_col_write_addrs),
@@ -297,7 +301,9 @@ module core
         .data_out(read_data),
         .data_out_valid(read_data_valid),
         .serial_in(serial_in),
-        .serial_out(serial_out)
+        .serial_out(serial_out),
+        .cts(cts),
+        .rts(rts)
     );
 
     // THREADS

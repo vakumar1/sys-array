@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     VerilatedVcdC* driver_tfp = new VerilatedVcdC;
     driver_uart->trace(driver_tfp, 99);
     driver_tfp->open("driver_uart.vcd");
-    sender_init(driver_tickcount, driver_uart, driver_tfp);
+    composite_init(driver_tickcount, driver_uart, driver_tfp);
     
     test_runner("[CORE]", "IMEM/BMEM STORE", 
         [&core, &tfp, &core_tickcount, &driver_uart, &driver_tfp, &driver_tickcount](){
@@ -204,38 +204,8 @@ int main(int argc, char** argv) {
             load_instr_t l = { (unsigned char) ((B_addr >> 8) & 0xFF) };
 
             // comp C = B * A + D
-            unsigned int C_addr = 0x00000800;
-            comp_instr_t c = { (unsigned char) ((A_addr >> 8) & 0xFF), 
-                                (unsigned char) ((D_addr >> 8) & 0xFF),
-                                (unsigned char) ((C_addr >> 8) & 0xFF)};
-
-            // write B4
-            unsigned char header = 0x2A;
-            write_instr_t w = { header, (unsigned char) ((C_addr >> 8) & 0xFF) };
-
-            term_instr_t t = {};
-
-            // store to thread 0 imem
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0x0, load_instr_to_bits(l));
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0x4, comp_instr_to_bits(c));
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0x8, write_instr_to_bits(w));
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0xC, term_instr_to_bits(t));
-
-            // enable and start thread 0;
-            update = {1, 1, 0, 0};
-            thread_update(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, update);
-
-            // store to thread 1 imem
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0x0, load_instr_to_bits(l));
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0x4, comp_instr_to_bits(c));
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0x8, write_instr_to_bits(w));
-            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0xC, term_instr_to_bits(t));
-
-            // enable and start thread 0;
-            update = {0, 1, 1, 1};
-            thread_update(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, update);
-
-            // read thread 0 and 1 bmem bytes from UART
+            unsigned int C_addr1 = 0x00000800;
+            unsigned int C_addr2 = 0x00000900;
             std::array<int, MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS> expected_C_data;
             for (int i = 0; i < MESHUNITS * TILEUNITS; i++) {
                 for (int j = 0; j < MESHUNITS * TILEUNITS; j++) {
@@ -246,9 +216,41 @@ int main(int argc, char** argv) {
                     }
                 }
             }
-            for (unsigned int i = 0; i < 2; i++) {
-                read_bmem(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, C_addr, header, expected_C_data);
-            }
+            comp_instr_t c1 = { (unsigned char) ((A_addr >> 8) & 0xFF), 
+                                (unsigned char) ((D_addr >> 8) & 0xFF),
+                                (unsigned char) ((C_addr1 >> 8) & 0xFF)};
+            comp_instr_t c2 = { (unsigned char) ((A_addr >> 8) & 0xFF), 
+                                (unsigned char) ((D_addr >> 8) & 0xFF),
+                                (unsigned char) ((C_addr2 >> 8) & 0xFF)};
+
+            // write B4
+            unsigned char header = 0x2A;
+            write_instr_t w1 = { header, (unsigned char) ((C_addr1 >> 8) & 0xFF) };
+            write_instr_t w2 = { header, (unsigned char) ((C_addr2 >> 8) & 0xFF) };
+
+            term_instr_t t = {};
+
+            // store to thread 0 imem
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0x0, load_instr_to_bits(l));
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0x4, comp_instr_to_bits(c1));
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0x8, write_instr_to_bits(w1));
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 0, 0xC, term_instr_to_bits(t));
+
+            // enable and start thread 0;
+            update = {1, 1, 0, 0};
+            thread_update(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, update);
+            read_bmem(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, C_addr1, header, expected_C_data);
+
+            // store to thread 1 imem
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0x0, load_instr_to_bits(l));
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0x4, comp_instr_to_bits(c2));
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0x8, write_instr_to_bits(w2));
+            imem_store(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, 1, 0xC, term_instr_to_bits(t));
+
+            // enable and start thread 0;
+            update = {0, 1, 1, 1};
+            thread_update(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, update);
+            read_bmem(driver_tickcount, driver_uart, driver_tfp, core_tickcount, core, tfp, C_addr2, header, expected_C_data);
         },
         [&tfp, &driver_tfp](){
             tfp->close();

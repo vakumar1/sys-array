@@ -78,6 +78,26 @@ void sender_tick(Vuart* sender, int& tickcount, VerilatedVcdC* tfp,
 // GENERAL
 //
 
+void composite_init(int& tickcount, Vuart* composite, VerilatedVcdC* tfp) {
+    composite->reset = 1;
+    tick(tickcount, composite, tfp);
+    composite->reset = 0;
+    composite_tick(composite, tickcount, tfp, 0x0, 0, 0, 1);
+}
+
+void composite_tick(Vuart* composite, int& tickcount, VerilatedVcdC* tfp,
+                    char data, char data_valid, 
+                    char device_rts, char device_serial_out) {
+    composite->reset = 0;
+    composite->data_in = data;
+    composite->data_in_valid = data_valid;
+    composite->local_ready = 1;
+    composite->serial_in = device_serial_out;
+    composite->cts = device_rts;
+    tick(tickcount, composite, tfp);
+}
+    
+
 // tick for a uart module
 void tick(int& tickcount, Vuart* tb, VerilatedVcdC* tfp) {
     tb->eval();

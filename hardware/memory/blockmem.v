@@ -21,6 +21,8 @@ module blockmem
         // thread
         input [BITWIDTH-1:0] thread0_read_addr,
         output signed [BITWIDTH-1:0] thread0_read_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0],
+        input [BITWIDTH-1:0] thread1_read_addr,
+        output signed [BITWIDTH-1:0] thread1_read_data [(MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS) - 1:0],
 
         // MEMORY WRITE SIGNALS
         // array
@@ -49,6 +51,8 @@ module blockmem
     // thread
     reg signed [BITWIDTH-1:0] thread0_buffer [BLOCK_SIZE - 1:0];
     assign thread0_read_data = thread0_buffer;
+    reg signed [BITWIDTH-1:0] thread1_buffer [BLOCK_SIZE - 1:0];
+    assign thread1_read_data = thread1_buffer;
 
     // loader
     localparam BLOCK_SIZE = MESHUNITS * MESHUNITS * TILEUNITS * TILEUNITS;
@@ -68,6 +72,7 @@ module blockmem
         // thread reads
         for (k = 0; k < BLOCK_SIZE; k++) begin
             thread0_buffer[k] = block_mem[((thread0_read_addr >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + k];
+            thread1_buffer[k] = block_mem[((thread1_read_addr >> $clog2(TILEUNITS)) << $clog2(TILEUNITS)) + k];
         end
     end
 

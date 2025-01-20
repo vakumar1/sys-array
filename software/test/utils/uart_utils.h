@@ -13,4 +13,8 @@ void sender_byte_bits(char data, std::vector<int>& result);
 void sender_init(int& tickcount, Vuart* sender, VerilatedVcdC* tfp);
 void sender_tick(Vuart* sender, int& tickcount, VerilatedVcdC* tfp,
                     char data, char data_valid, char receiver_rts);
+void composite_init(int& tickcount, Vuart* composite, VerilatedVcdC* tfp);
+void composite_tick(Vuart* composite, int& tickcount, VerilatedVcdC* tfp,
+                    char data, char data_valid, 
+                    char device_rts, char device_serial_out);
 void tick(int& tickcount, Vuart* tb, VerilatedVcdC* tfp);

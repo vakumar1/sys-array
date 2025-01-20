@@ -28,6 +28,7 @@ void init(int& tickcount, Vcore* tb, VerilatedVcdC* tfp) {
 
     // needed to overwrite default of serial=0 (which indicates TX start)
     tb->serial_in = 1;
+    tb->cts = 1;
     tick(tickcount, tb, tfp, 1);
 }
 
@@ -48,9 +49,10 @@ void wait_on_final_bit(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC*
     for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
         sprintf(signal_msg, "[bit %d][iter %d] driver_uart->serial_out", 9, i);
         signal_err(signal_msg, 0, driver_uart->serial_out);
-        sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
+        composite_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, core->rts, core->serial_out);
         tick(core_tickcount, core, tfp, 1);
         core->serial_in = driver_uart->serial_out;
+        driver_uart->cts = core->rts;
     }
 }
 
@@ -59,13 +61,14 @@ void send_byte(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
     
     // wait a random number of cycles to catch edge errors
     for (int i = 0; i < SYMBOL_TICK_COUNT + (std::rand() % 5); i++) {
-        sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
+        composite_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, core->rts, core->serial_out);
         tick(core_tickcount, core, tfp, 1);
         core->serial_in = driver_uart->serial_out;
+        driver_uart->cts = core->rts;
     }
 
     // init sender with data
-    sender_tick(driver_uart, driver_tickcount, driver_tfp, byte, 1, 1);
+    composite_tick(driver_uart, driver_tickcount, driver_tfp, byte, 1, core->rts, core->serial_out);
     tick(core_tickcount, core, tfp, driver_uart->serial_out);
 
     char signal_msg[100];
@@ -75,9 +78,10 @@ void send_byte(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
         sprintf(signal_msg, "[bit %d][iter %d] driver_uart->serial_out", 0, i);
         signal_err(signal_msg, 0, driver_uart->serial_out);
 
-        sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
+        composite_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, core->rts, core->serial_out);
         tick(core_tickcount, core, tfp, driver_uart->serial_out);
         core->serial_in = driver_uart->serial_out;
+        driver_uart->cts = core->rts;
     }
 
     // send bits 0-7
@@ -87,9 +91,10 @@ void send_byte(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_
             sprintf(signal_msg, "[bit %d][iter %d] driver_uart->serial_out", bit_pos + 1, i);
             signal_err(signal_msg, expected_set, driver_uart->serial_out);
 
-            sender_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, 1);
+            composite_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, core->rts, core->serial_out);
             tick(core_tickcount, core, tfp, driver_uart->serial_out);
             core->serial_in = driver_uart->serial_out;
+            driver_uart->cts = core->rts;
         }
     }
 
@@ -178,46 +183,17 @@ int block_store(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver
 unsigned char read_byte(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp,
                         int& core_tickcount, Vcore* core, VerilatedVcdC* tfp) {
 
-
-    // wait until UART starts writing to serial_out
-    for (int cycle_count = 0; ; cycle_count++) {
-        if (core->serial_out == 0) {
-            break;
-        }
-        tick(core_tickcount, core, tfp, 1);
-        condition_err("Timed out waiting to read from UART", cycle_count >= 100000);
-    }
-
-    char signal_msg[100];
-    unsigned char actual_byte = 0x0;
-    int bit_set = 0;
-
-    // receive initial bit
-    for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
-        sprintf(signal_msg, "[bit %d][iter %d] core->serial_out", 0, i);
-        signal_err(signal_msg, 0, core->serial_out);
-        tick(core_tickcount, core, tfp, 1);
-    }
-
-    // receive bits 0-7
-    for (int bit_pos = 7; bit_pos >= 0; bit_pos--) {
-        for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
-            if (i == 0) {
-                bit_set = core->serial_out;
-                actual_byte = (actual_byte << 1) | bit_set;
-            }
+    while (true) {
+        if (driver_uart->data_out_valid) {
+            unsigned char byte = (unsigned char) driver_uart->data_out;
+            composite_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, core->rts, core->serial_out);
             tick(core_tickcount, core, tfp, 1);
+            data_err("UART has multiple consecutive valid data", driver_uart->data_out_valid, 0);
+            return byte;
         }
-    }
-
-    // receive final bit
-    for (int i = 0; i < SYMBOL_TICK_COUNT; i++) {
-        sprintf(signal_msg, "[bit %d][iter %d] core->serial_out", 9, i);
-        signal_err(signal_msg, 0, core->serial_out);
+        composite_tick(driver_uart, driver_tickcount, driver_tfp, 0x0, 0, core->rts, core->serial_out);
         tick(core_tickcount, core, tfp, 1);
     }
-
-    return actual_byte;
 }
 
 int read_bmem(int& driver_tickcount, Vuart* driver_uart, VerilatedVcdC* driver_tfp,

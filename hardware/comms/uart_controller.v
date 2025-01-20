@@ -23,8 +23,9 @@ module uart_controller
 
         // SERIAL LINES
         input serial_in,
-        output serial_out
-
+        output serial_out,
+        input cts,
+        output rts
     );
 
     // SYNCHRONIZATION SIGNALS + STATE
@@ -106,8 +107,8 @@ module uart_controller
         .serial_in(serial_in),
         .serial_out(serial_out),
         .local_ready(1), // TODO: use R_FIFO signals to control UART reads
-        .cts(1), // TODO: use control signals from driver
-        .rts() // TODO: use control signals from driver
+        .cts(cts),
+        .rts(rts)
     );
 
 

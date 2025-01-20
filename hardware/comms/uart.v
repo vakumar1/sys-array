@@ -49,7 +49,7 @@ module uart
         .data_out_valid(data_out_valid),
         .serial_in(serial_in),
         .rts(rts),
-        .uart_ready(!tx_running && local_ready)
+        .uart_ready(local_ready)
     );
 
 endmodule

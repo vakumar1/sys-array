@@ -54,6 +54,7 @@ void init(int& tickcount, Vuart_controller* tb, VerilatedVcdC* tfp) {
 
     // needed to overwrite default of serial=0 (which indicates TX start)
     tb->serial_in = 1;
+    tb->cts = 1;
     tick(tickcount, tb, tfp);
 }
 
