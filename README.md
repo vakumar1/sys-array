@@ -3,12 +3,12 @@
 Accelerator for matrix multiplication - the accelerator loads instructions + matrix memory from the host and executes the instructions to compute matrix multiplications and send the output back to the host
 
 Notes on the accelerator design and ISA are linked below
-- [x] ![Systolic Array MatMul Device Part 1: The Systolic Array](https://hackmd.io/@n9vXJ2dWSK-txnWnjmMPGQ/BJ3wJUzEke)
-- [x] ![Systolic Array MatMul Device Part 2: UART Comms + Memory](https://hackmd.io/@n9vXJ2dWSK-txnWnjmMPGQ/HJsfYs8o6)
-- [x] ![Systolic Array MatMul Device Part 3: ISA](https://hackmd.io/@n9vXJ2dWSK-txnWnjmMPGQ/SylWqNBEyx)
+- [x] [Systolic Array MatMul Device Part 1: The Systolic Array](https://hackmd.io/@n9vXJ2dWSK-txnWnjmMPGQ/BJ3wJUzEke)
+- [x] [Systolic Array MatMul Device Part 2: UART Comms + Memory](https://hackmd.io/@n9vXJ2dWSK-txnWnjmMPGQ/HJsfYs8o6)
+- [x] [Systolic Array MatMul Device Part 3: ISA](https://hackmd.io/@n9vXJ2dWSK-txnWnjmMPGQ/SylWqNBEyx)
 
 ### Virtual Accelerator Usage
-- build the virtual accelerator with Verilator and compile - note this requires the Verilator dependency to be installed locally ![here](https://github.com/vakumar1/sys-array/blob/main/Makefile#L2-L3)
+- build the virtual accelerator with Verilator and compile - note this requires the Verilator dependency to be installed locally [here](https://github.com/vakumar1/sys-array/blob/main/Makefile#L2-L3)
 ```
 make core
 ```
